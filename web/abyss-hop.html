@@ -997,7 +997,8 @@
       if (sy < -30 || sy > CFG.logicHeight + 30) continue;
       ctx.save();
       ctx.translate(sh.x, sy);
-      if (sh.facing < 0) ctx.scale(-1, 1);
+      // 🦈絵文字も多くの環境で左向きなので、右移動時だけ反転する。
+      if (sh.facing > 0) ctx.scale(-1, 1);
       ctx.fillText("🦈", 0, 0);
       ctx.restore();
     }
@@ -1012,7 +1013,8 @@
       if (sy < -120 || sy > CFG.logicHeight + 120) continue;
       ctx.save();
       ctx.translate(wh.x, sy);
-      if (wh.facing < 0) ctx.scale(-1, 1);
+      // 🐋絵文字も多くの環境で左向きなので、右移動時だけ反転する。
+      if (wh.facing > 0) ctx.scale(-1, 1);
       ctx.shadowColor = "rgba(70, 180, 255, 0.32)";
       ctx.shadowBlur = 18;
       ctx.fillStyle = "#ffffff";
@@ -1042,14 +1044,17 @@
     ctx.save();
     ctx.translate(deathFish.x, sy);
     ctx.rotate(deathFish.rot);
-    if (deathFish.facing < 0) ctx.scale(-1, 1);
+    // 🐟絵文字は多くの環境で左向きなので、右移動時だけ反転する。
+    if (deathFish.facing > 0) ctx.scale(-1, 1);
     ctx.globalAlpha = 0.9;
-    ctx.font = "bold " + CFG.playerEmojiSize + "px sans-serif";
+    ctx.font = CFG.playerEmojiSize + "px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "rgba(80, 200, 255, 0.55)";
-    ctx.shadowBlur = 10;
+    ctx.shadowColor = "rgba(80, 200, 255, 0.40)";
+    ctx.shadowBlur = 5;
+    ctx.fillText("🐟", 0, 0);
+    ctx.shadowBlur = 0;
     ctx.fillText("🐟", 0, 0);
 
     // やられた感じを出す小さな気泡。
@@ -1065,29 +1070,40 @@
 
   function drawPlayer() {
     if (!player) return;
-    const sy = player.y - cameraY;
+    // 絵文字はサブピクセル位置 + 強いshadowでぼやけやすいので、描画位置を丸める。
+    const sy = Math.round(player.y - cameraY);
     ctx.save();
-    ctx.translate(player.x, sy);
+    ctx.translate(Math.round(player.x), sy);
 
     if (player.invuln || state === "intro") {
       ctx.save();
-      ctx.strokeStyle = "rgba(150, 235, 255, 0.75)";
+      ctx.strokeStyle = "rgba(150, 235, 255, 0.70)";
       ctx.lineWidth = 2;
-      ctx.shadowColor = "rgba(90, 210, 255, 0.9)";
-      ctx.shadowBlur = 12;
+      ctx.shadowColor = "rgba(90, 210, 255, 0.65)";
+      ctx.shadowBlur = 7;
       ctx.beginPath();
       ctx.arc(0, 0, CFG.playerEmojiSize * 0.58, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
 
-    if (player.facing < 0) ctx.scale(-1, 1);
-    ctx.font = "bold " + CFG.playerEmojiSize + "px sans-serif";
+    // 🐟絵文字は多くの環境で左向きなので、右移動時だけ反転する。
+    if (player.facing > 0) ctx.scale(-1, 1);
+    ctx.font = CFG.playerEmojiSize + "px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "rgba(80, 200, 255, 0.9)";
-    ctx.shadowBlur = 14;
+
+    // 先に薄い発光を描き、最後に影なしで本体を描くことで輪郭をはっきりさせる。
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.shadowColor = "rgba(80, 200, 255, 0.75)";
+    ctx.shadowBlur = 6;
+    ctx.fillText("🐟", 0, 0);
+    ctx.restore();
+
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
     ctx.fillText("🐟", 0, 0);
     ctx.restore();
   }
