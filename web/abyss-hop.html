@@ -111,6 +111,37 @@
     firstCrabTime: 2.4,
     firstSharkTime: 2.8,
     firstWhaleTime: 24,
+    maxShells: 256,
+    maxCrabs: 256,
+    maxSharks: 256,
+    maxWhales: 256,
+    maxPuffers: 256,
+    // 🐡: 表示深度100スクロール超で登場。🐟の1.25〜2.0倍を行き来して膨らむ/しぼむ。
+    pufferEmojiSize: 60,            // スプライトは最大サイズ(2.0x=60)で焼き、描画時に縮小
+    pufferBaseScale: 0.625,        // 60 * 0.625 = 37.5 = 🐟の1.25倍(最小)
+    pufferMaxScale: 1.0,           // 60 * 1.0 = 60 = 🐟の2.0倍(最大)
+    pufferRadiusMin: 17,           // 当たり半径（しぼみ時）
+    pufferRadiusMax: 28,           // 当たり半径（膨らみ時・クジラ52より十分小さく）
+    pufferSpeed: 105,              // 🦈(最大140)より若干遅い巡航速度
+    pufferBreath: 0.9,             // 膨張/収縮の速さ(rad/s)
+    firstPufferDepth: 100,         // 表示深度この値を超えてから出現
+    // ===== サウンド系パワーアップ =====
+    // 🎧: 表示深度100スクロールごとに床へ1個。🐟と同じくらいの大きさ。
+    powerupEmojiSize: 30,
+    powerupRadius: 15,
+    itemPickupParticles: 14,
+    powerupDepthStep: 100,          // 何スクロールごとに出すか（HUD表示と同じ単位）
+    // 効果: 取得から12秒間、🐟の周囲に音符を全方位放出。
+    musicDuration: 12,
+    noteEmitInterval: 0.09,         // 音符の放出間隔（秒）
+    noteEmitPerTick: 2,             // 1回に出す数
+    noteSpeed: 150,                 // 放出初速(px/s)
+    noteRange: 105,                 // 🐟からこの距離を超えた音符は消える（近距離オーラ）
+    noteRadius: 12,                 // 音符の当たり半径
+    note1EmojiSize: 22,             // 🎵
+    note2EmojiSize: 37,             // 🎶（約1.7倍）
+    maxNotes: 64,                   // 同時存在上限（負荷対策）
+    whaleHp: 3,                     // クジラは音符3ヒットで消滅
   };
 
   // ===== State =====
@@ -128,6 +159,8 @@
   let dim = 0;
   let topDanger = 0;
   let deathFish = null;
+  let helpVisible = true;
+  let helpTimer = 0;
 
   const keys = new Set();
   const latched = { p: false, n: false };
@@ -143,8 +176,11 @@
   let player = null;
   let platforms = [];
   let shells = [];
+  let powerups = [];
+  let notes = [];
   let sharks = [];
   let whales = [];
+  let puffers = [];
   let crabs = [];
   let bubbles = [];
   let dangerBubbles = [];
@@ -153,6 +189,7 @@
   let cameraY = 0;
   let generatedUntil = 0;
   let startPlatform = null;
+  let nextPowerupDepth = CFG.powerupDepthStep;  // 次に🎧を出す表示深度
 
   // ===== localStorage =====
   function loadBest() {
@@ -172,6 +209,86 @@
   resetBubbles();
   resetDangerBubbles();
 
+  // ===== Sprite cache =====
+  // 絵文字を毎フレーム fillText + shadowBlur で描くと、敵が増え続けたとき
+  // グリフのラスタライズと発光処理がボトルネックになる。
+  // そこで各絵文字（発光込み）を一度だけオフスクリーンに焼き、以降は
+  // drawImage で使い回す。左右反転は描画時の scale だけで済ませる。
+  const SPRITES = {};
+  let spriteScale = 0;
+  let bgGradient = null;
+  let dangerGradient = null;
+
+  function makeSprite(emoji, fontSize, glowPasses) {
+    const ss = spriteScale;
+    let maxBlur = 0;
+    if (glowPasses) for (const g of glowPasses) maxBlur = Math.max(maxBlur, g.blur);
+    const pad = maxBlur + 8;
+    const size = fontSize + pad * 2;
+    const oc = document.createElement("canvas");
+    oc.width = Math.max(1, Math.round(size * ss));
+    oc.height = Math.max(1, Math.round(size * ss));
+    const o = oc.getContext("2d");
+    o.setTransform(ss, 0, 0, ss, 0, 0);
+    o.textAlign = "center";
+    o.textBaseline = "middle";
+    o.font = fontSize + "px sans-serif";
+    o.fillStyle = "#ffffff";
+    const c = size / 2;
+    if (glowPasses) {
+      for (const g of glowPasses) {
+        o.save();
+        o.globalAlpha = g.alpha;
+        o.shadowColor = g.color;
+        o.shadowBlur = g.blur;
+        o.fillText(emoji, c, c);
+        o.restore();
+      }
+    }
+    o.globalAlpha = 1;
+    o.shadowBlur = 0;
+    o.fillText(emoji, c, c);
+    return { canvas: oc, size };
+  }
+
+  function buildSprites() {
+    SPRITES.shell = makeSprite("🐚", CFG.shellEmojiSize, null);
+    SPRITES.crab  = makeSprite("🦀", CFG.crabEmojiSize, null);
+    SPRITES.shark = makeSprite("🦈", CFG.sharkEmojiSize, null);
+    SPRITES.whale = makeSprite("🐋", CFG.whaleEmojiSize, [{ color: "rgba(70,180,255,0.32)", blur: 18, alpha: 1 }]);
+    SPRITES.puffer = makeSprite("🐡", CFG.pufferEmojiSize, [{ color: "rgba(255,210,80,0.24)", blur: 10, alpha: 0.7 }]);
+    // プレイヤー魚は「薄い発光 → 本体」の2パスを焼き込み、輪郭をはっきり保つ。
+    SPRITES.fish  = makeSprite("🐟", CFG.playerEmojiSize, [{ color: "rgba(80,200,255,0.75)", blur: 6, alpha: 0.55 }]);
+    // 🎧 は🐟と同じくらいの大きさ。取りに行きたくなるよう軽く光らせる。
+    SPRITES.phones = makeSprite("🎧", CFG.powerupEmojiSize, [{ color: "rgba(120,230,255,0.8)", blur: 9, alpha: 0.7 }]);
+    // 音符2種。🎶 は🎵の約1.7倍。発光を焼き込んで小さくても視認できるように。
+    SPRITES.note1 = makeSprite("🎵", CFG.note1EmojiSize, [{ color: "rgba(160,240,255,0.85)", blur: 6, alpha: 0.7 }]);
+    SPRITES.note2 = makeSprite("🎶", CFG.note2EmojiSize, [{ color: "rgba(190,200,255,0.85)", blur: 7, alpha: 0.7 }]);
+  }
+
+  function ensureSprites() {
+    // 表示スケール（dpr × 拡大率）に見合う解像度で焼き直し、拡大時のボケを防ぐ。
+    const rect = wrapper.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const need = Math.min(4, Math.max(1, dpr * (rect.width / CFG.logicWidth)));
+    if (need > spriteScale + 0.01) {
+      spriteScale = Math.ceil(need * 2) / 2; // 0.5刻みで確保し、頻繁な再生成を避ける
+      buildSprites();
+    }
+  }
+
+  function drawSprite(sp, x, y, facing, alpha, rot, scale) {
+    const s = sp.size * (scale || 1);
+    ctx.save();
+    ctx.translate(x, y);
+    if (rot) ctx.rotate(rot);
+    // 絵文字は多くの環境で左向きなので、右移動時だけ反転する。
+    if (facing > 0) ctx.scale(-1, 1);
+    if (alpha != null && alpha !== 1) ctx.globalAlpha = alpha;
+    ctx.drawImage(sp.canvas, -s / 2, -s / 2, s, s);
+    ctx.restore();
+  }
+
   // ===== Resize =====
   let lastCanvasWidth = 0;
   let lastCanvasHeight = 0;
@@ -190,6 +307,8 @@
       lastCanvasWidth = nextWidth;
       lastCanvasHeight = nextHeight;
       lastCanvasDpr = dpr;
+      bgGradient = null;
+      dangerGradient = null;
     }
 
     // Canvasの実表示サイズとゲーム内論理解像度を分離してスケーリングする。
@@ -197,6 +316,7 @@
     const scaleY = rect.height / CFG.logicHeight;
     ctx.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
     ctx.imageSmoothingEnabled = true;
+    ensureSprites();
   }
   window.addEventListener("resize", resize, { passive: true });
   resize();
@@ -237,6 +357,12 @@
       case "Enter": return "enter";
       case "Space": return "space";
       case "Escape": return "esc";
+      case "ArrowLeft":  return "b";
+      case "ArrowRight": return "f";
+      case "ArrowUp":    return "p";
+      case "ArrowDown":  return "n";
+      case "Slash":      return "?";
+      case "Digit3":     return "3";
       default: return null;
     }
   }
@@ -244,11 +370,11 @@
   window.addEventListener("keydown", (e) => {
     const k = codeKey(e.code);
     if (!k) return;
-    if (k === "b" || k === "f" || k === "enter" || k === "space" || k === "esc" || k === "r") {
+    if (k === "b" || k === "f" || k === "enter" || k === "space" || k === "esc" || k === "r" ||
+        k === "p" || k === "n" || k === "?" || k === "3") {
       e.preventDefault();
     }
     if (k === "p" || k === "n") {
-      e.preventDefault();
       if (e.repeat) return;
       if (k === "p" && !latched.p) { latched.p = true; onPressEdge("p"); }
       if (k === "n" && !latched.n) { latched.n = true; onPressEdge("n"); }
@@ -269,6 +395,13 @@
       else if (state === "paused") state = "title";
       else if (state === "gameover") state = "title";
     }
+    if (k === "?") {
+      helpVisible = !helpVisible;
+    }
+    if (k === "3" && e.shiftKey && state === "title") {
+      bestDepth = 0;
+      saveBest();
+    }
   }, { passive: false });
 
   window.addEventListener("keyup", (e) => {
@@ -279,14 +412,10 @@
     keys.delete(k);
   });
 
-  function widthScale() {
-    // 800px幅を基準にした物理スケール。
-    // 今は論理解像度800なので従来と同じだが、画面幅基準で調整しやすくしておく。
-    return CFG.logicWidth / 800;
-  }
-
+  // 800px幅を基準にした物理スケール。論理解像度は実行中に変わらないため一度だけ算出する。
+  const WIDTH_SCALE = CFG.logicWidth / 800;
   function scaled(v) {
-    return v * widthScale();
+    return v * WIDTH_SCALE;
   }
 
   function onPressEdge(action) {
@@ -325,6 +454,9 @@
       airDiveUsed: false,
       facing: 1,
       invuln: true,
+      musicTimer: 0,      // >0 の間、音符オーラ発生
+      noteAcc: 0,         // 音符放出用のタイマー蓄積
+      nextNoteBig: false, // 🎵 / 🎶 を交互に出す
     };
   }
 
@@ -336,6 +468,24 @@
     return { x, y, r: CFG.shellRadius, active: true };
   }
 
+  function makePowerup(x, y) {
+    return { x, y, r: CFG.powerupRadius, active: true, bob: Math.random() * Math.PI * 2 };
+  }
+
+  function makeNote(x, y, ang, big) {
+    const spd = CFG.noteSpeed * (0.75 + Math.random() * 0.5);
+    return {
+      x, y,
+      vx: Math.cos(ang) * spd,
+      vy: Math.sin(ang) * spd,
+      r: CFG.noteRadius,
+      big: !!big,               // true=🎶(大) / false=🎵(小)
+      spin: (Math.random() - 0.5) * 6,
+      rot: Math.random() * Math.PI * 2,
+      active: true,
+    };
+  }
+
   function makeShark(x, y) {
     return {
       x, y,
@@ -344,6 +494,22 @@
       r: CFG.sharkRadius,
       turnTimer: 1 + Math.random() * 2,
       facing: 1,
+      active: true,
+    };
+  }
+
+  function makePuffer(x, y) {
+    const ang = Math.random() * Math.PI * 2;
+    const spd = CFG.pufferSpeed * (0.8 + Math.random() * 0.4);
+    return {
+      x, y,
+      vx: Math.cos(ang) * spd,
+      vy: Math.sin(ang) * spd,
+      breath: Math.random() * Math.PI * 2,  // 膨張位相
+      scale: CFG.pufferBaseScale,
+      r: CFG.pufferRadiusMin,
+      facing: Math.cos(ang) >= 0 ? 1 : -1,
+      active: true,
     };
   }
 
@@ -357,6 +523,8 @@
       turnTimer: 2.5 + Math.random() * 2.5,
       facing: dir,
       bob: Math.random() * Math.PI * 2,
+      active: true,
+      hp: CFG.whaleHp,
     };
   }
 
@@ -428,6 +596,39 @@
     }
   }
 
+  function spawnPickupParticles(x, y) {
+    for (let i = 0; i < CFG.itemPickupParticles; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random() * 120;
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 40,
+        life: 0.5 + Math.random() * 0.4,
+        maxLife: 1,
+        r: 1.5 + Math.random() * 2.5,
+        color: "rgba(150,240,255,0.95)",
+      });
+    }
+  }
+
+  // 敵が音符で消えたときの小さな破裂。
+  function spawnPopParticles(x, y) {
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 70 + Math.random() * 130;
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life: 0.4 + Math.random() * 0.4,
+        maxLife: 1,
+        r: 1.5 + Math.random() * 2.5,
+        color: "rgba(190,220,255,0.9)",
+      });
+    }
+  }
+
   function spawnSplash(x, y) {
     for (let i = 0; i < 20; i++) {
       particles.push({
@@ -461,9 +662,12 @@
     player = makePlayer();
     platforms.length = 0;
     shells.length = 0;
+    powerups.length = 0;
+    notes.length = 0;
     crabs.length = 0;
     sharks.length = 0;
     whales.length = 0;
+    puffers.length = 0;
     particles.length = 0;
     resetBubbles();
     resetDangerBubbles();
@@ -477,6 +681,7 @@
     dim = 0;
     topDanger = 0;
     deathFish = null;
+    nextPowerupDepth = CFG.powerupDepthStep;
 
     // First platform: long and safe, place player directly on it
     startPlatform = makePlatform(120, 0, 340);
@@ -505,6 +710,7 @@
 
     generatedUntil = 610;
     introTimer = CFG.introDuration;
+    helpTimer = 20;
   }
 
   function difficultyProfile() {
@@ -574,7 +780,7 @@
         if (playTime < CFG.firstEnemyTime) return;
         if (idx === 0 && Math.random() < 0.80) return;
         const shellChance = 0.22 + difficulty * 0.24 + (band === 1 ? 0.06 : 0);
-        if (Math.random() < shellChance && pl.w > 80) {
+        if (Math.random() < shellChance && pl.w > 80 && shells.length < CFG.maxShells) {
           const sx = pl.x + 28 + Math.random() * Math.max(1, pl.w - 56);
           const sy = pl.y - 10;
           shells.push(makeShell(sx, sy));
@@ -585,7 +791,7 @@
       segPlatforms.forEach((pl, idx) => {
         if (playTime < CFG.firstCrabTime) return;
         if (idx === 0 && Math.random() < 0.66) return;
-        if (pl.w > 110 && Math.random() < 0.18 + difficulty * 0.20) {
+        if (pl.w > 110 && crabs.length < CFG.maxCrabs && Math.random() < 0.18 + difficulty * 0.20) {
           const cx = pl.x + 18 + Math.random() * Math.max(1, pl.w - 36);
           const cy = pl.y - 10;
           crabs.push(makeCrab(cx, cy, pl.x + 10, pl.x + pl.w - 10));
@@ -593,7 +799,7 @@
       });
 
       // サメ：スクロールが遅いので2秒台後半から登場。ただし序盤は低密度。
-      if (playTime > CFG.firstSharkTime) {
+      if (playTime > CFG.firstSharkTime && sharks.length < CFG.maxSharks) {
         const sharkChance = 0.12 + difficulty * 0.24 + (band === 3 ? 0.08 : 0);
         if (Math.random() < sharkChance) {
           const sx = 40 + Math.random() * (CFG.logicWidth - 80);
@@ -605,7 +811,7 @@
       }
 
       // クジラ：中盤から出る巨大な移動障害。遅くて予測しやすいが、画面支配力が高い。
-      if (playTime > CFG.firstWhaleTime) {
+      if (playTime > CFG.firstWhaleTime && whales.length < CFG.maxWhales) {
         const whaleChance = 0.035 + difficulty * 0.09 + (band === 2 ? 0.025 : 0);
         if (Math.random() < whaleChance) {
           const wx = 90 + Math.random() * (CFG.logicWidth - 180);
@@ -616,17 +822,64 @@
         }
       }
 
+      // 🐡: 表示深度100スクロール超で登場。膨らんだり縮んだりしながら漂う中型の脅威。
+      if (depthScroll > CFG.firstPufferDepth && puffers.length < CFG.maxPuffers) {
+        const pufferChance = 0.05 + difficulty * 0.10 + (band === 3 ? 0.04 : 0);
+        if (Math.random() < pufferChance) {
+          const fx = 60 + Math.random() * (CFG.logicWidth - 120);
+          const fy = y - 40 - Math.random() * 90;
+          if (!player || Math.hypot(fx - player.x, fy - player.y) > CFG.enemySafeDist + CFG.pufferRadiusMax) {
+            puffers.push(makePuffer(fx, fy));
+          }
+        }
+      }
+
       generatedUntil = y;
     }
   }
 
+  // 🎧: 表示深度が powerupDepthStep ごとの節目を超えたら、これから潜る足場に1個置く。
+  // 生成済みの範囲から「プレイヤーより下（これから行く側）」の広めの足場を選ぶ。
+  function spawnPowerupIfDue() {
+    const depth = Math.floor(maxScroll / CFG.scrollUnit);
+    if (depth < nextPowerupDepth) return;
+
+    let target = null;
+    for (const pl of platforms) {
+      if (pl.y <= player.y + 40) continue;              // 上（通り過ぎた側）は除外
+      if (pl.w < 90) continue;                          // 狭すぎる足場は避ける
+      if (!target || pl.y < target.y) target = pl;      // なるべく手前（浅い）を優先
+    }
+    // 適地が無ければ節目だけ消化して次の節目へ（無限ループ防止）。
+    if (target && powerups.length < 64) {
+      powerups.push(makePowerup(target.x + target.w / 2, target.y - 24));
+    }
+    nextPowerupDepth += CFG.powerupDepthStep;
+  }
+
+  function compactEntities(arr, minY, maxY, activeOnly) {
+    let write = 0;
+    for (let read = 0; read < arr.length; read++) {
+      const entity = arr[read];
+      if (activeOnly && !entity.active) continue;
+      if (entity.y <= minY || entity.y >= maxY) continue;
+      arr[write++] = entity;
+    }
+    arr.length = write;
+  }
+
   function cleanup(yTop) {
-    const margin = 200;
-    platforms = platforms.filter(p => p.y > yTop - margin);
-    shells = shells.filter(s => s.y > yTop - margin && s.active);
-    crabs = crabs.filter(c => c.y > yTop - margin && c.active);
-    sharks = sharks.filter(s => s.y > yTop - margin);
-    whales = whales.filter(w => w.y > yTop - margin && w.y < yTop + CFG.logicHeight + 260);
+    const minY = yTop - 200;
+    compactEntities(platforms, minY, Infinity, false);
+    compactEntities(shells, minY, Infinity, true);
+    compactEntities(powerups, minY, Infinity, true);
+    compactEntities(notes, minY - 200, yTop + CFG.logicHeight + 200, true);
+    compactEntities(crabs, minY, Infinity, true);
+    // サメとクジラはカメラ内に留まり続ける仕様。active=false なら将来のアイテム効果で削除できる。
+    compactEntities(sharks, minY, Infinity, true);
+    compactEntities(whales, minY, yTop + CFG.logicHeight + 260, true);
+    // 🐡 は画面内で跳ね返る仕様。inactive（音符で撃破）だけ除去する。
+    compactEntities(puffers, minY, yTop + CFG.logicHeight + 260, true);
   }
 
   function playerHitRadius() {
@@ -687,45 +940,49 @@
       }
     }
 
+    // 🎧 の取得。ダメージではないので無敵中でも拾える。
+    if (state === "playing") {
+      const grabR = playerHitRadius();
+      for (const pu of powerups) {
+        if (!pu.active) continue;
+        const dx = p.x - pu.x, dy = p.y - pu.y, rr = grabR + pu.r;
+        if (dx * dx + dy * dy < rr * rr) {
+          pu.active = false;
+          p.musicTimer = CFG.musicDuration;   // 再取得なら残り時間を12秒へリセット
+          p.noteAcc = 0;
+          spawnPickupParticles(pu.x, pu.y);
+        }
+      }
+    }
+
     if (state === "playing" && introTimer <= 0 && !p.invuln) {
+      // 敵は増え続ける設計なので、共通の自機半径はループ外で一度だけ求める。
+      const pr = playerHitRadius();
       for (const s of shells) {
         if (!s.active) continue;
-        const dx = p.x - s.x;
-        const dy = p.y - s.y;
-        const rr = playerHitRadius() + s.r;
-        if (dx * dx + dy * dy < rr * rr) {
-          gameOver();
-          return;
-        }
+        const dx = p.x - s.x, dy = p.y - s.y, rr = pr + s.r;
+        if (dx * dx + dy * dy < rr * rr) { gameOver(); return; }
       }
       for (const sh of sharks) {
-        const dx = p.x - sh.x;
-        const dy = p.y - sh.y;
-        const rr = playerHitRadius() + sh.r;
-        if (dx * dx + dy * dy < rr * rr) {
-          gameOver();
-          return;
-        }
+        if (!sh.active) continue;
+        const dx = p.x - sh.x, dy = p.y - sh.y, rr = pr + sh.r;
+        if (dx * dx + dy * dy < rr * rr) { gameOver(); return; }
       }
       for (const wh of whales) {
-        const dx = p.x - wh.x;
-        const dy = p.y - wh.y;
+        if (!wh.active) continue;
         // 見た目は巨大だが、当たり判定はやや小さくして理不尽さを抑える。
-        const rr = playerHitRadius() + wh.r;
-        if (dx * dx + dy * dy < rr * rr) {
-          gameOver();
-          return;
-        }
+        const dx = p.x - wh.x, dy = p.y - wh.y, rr = pr + wh.r;
+        if (dx * dx + dy * dy < rr * rr) { gameOver(); return; }
       }
       for (const c of crabs) {
         if (!c.active) continue;
-        const dx = p.x - c.x;
-        const dy = p.y - c.y;
-        const rr = playerHitRadius() + c.r;
-        if (dx * dx + dy * dy < rr * rr) {
-          gameOver();
-          return;
-        }
+        const dx = p.x - c.x, dy = p.y - c.y, rr = pr + c.r;
+        if (dx * dx + dy * dy < rr * rr) { gameOver(); return; }
+      }
+      for (const pf of puffers) {
+        if (!pf.active) continue;
+        const dx = p.x - pf.x, dy = p.y - pf.y, rr = pr + pf.r;
+        if (dx * dx + dy * dy < rr * rr) { gameOver(); return; }
       }
     }
   }
@@ -736,7 +993,6 @@
     deathFish.x += deathFish.vx * dt;
     deathFish.y += deathFish.vy * dt;
     deathFish.rot += deathFish.vr * dt;
-    deathFish.life = Math.max(0, deathFish.life - dt * 0.22);
 
     // 画面下へ落ちた後は、見えない位置で止めて無駄な数値発散を避ける。
     const bottom = cameraY + CFG.logicHeight + 90;
@@ -750,6 +1006,7 @@
 
   function updateEntities(dt) {
     for (const sh of sharks) {
+      if (!sh.active) continue;
       sh.x += sh.vx * dt;
       sh.y += sh.vy * dt;
       sh.turnTimer -= dt;
@@ -771,6 +1028,7 @@
     }
 
     for (const wh of whales) {
+      if (!wh.active) continue;
       wh.bob += dt * 1.2;
       wh.x += wh.vx * dt;
       wh.y += (wh.vy + Math.sin(wh.bob) * 10) * dt;
@@ -793,9 +1051,30 @@
     }
 
     for (const c of crabs) {
+      if (!c.active) continue;
       c.x += c.vx * dt;
       if (c.x < c.left) { c.x = c.left; c.vx = Math.abs(c.vx); }
       if (c.x > c.right) { c.x = c.right; c.vx = -Math.abs(c.vx); }
+    }
+
+    for (const pf of puffers) {
+      if (!pf.active) continue;
+      pf.x += pf.vx * dt;
+      pf.y += pf.vy * dt;
+
+      // 膨張/収縮：0..1 の呼吸波で scale と当たり半径を連動させる。
+      pf.breath += CFG.pufferBreath * dt;
+      const t = 0.5 + 0.5 * Math.sin(pf.breath);
+      pf.scale = CFG.pufferBaseScale + (CFG.pufferMaxScale - CFG.pufferBaseScale) * t;
+      pf.r = CFG.pufferRadiusMin + (CFG.pufferRadiusMax - CFG.pufferRadiusMin) * t;
+
+      // 画面（カメラ範囲）で跳ね返る。半径ぶん内側で反射させて食い込みを防ぐ。
+      const rad = pf.r;
+      if (pf.x < rad) { pf.x = rad; pf.vx = Math.abs(pf.vx); }
+      if (pf.x > CFG.logicWidth - rad) { pf.x = CFG.logicWidth - rad; pf.vx = -Math.abs(pf.vx); }
+      if (pf.y < cameraY + rad) { pf.y = cameraY + rad; pf.vy = Math.abs(pf.vy); }
+      if (pf.y > cameraY + CFG.logicHeight - rad) { pf.y = cameraY + CFG.logicHeight - rad; pf.vy = -Math.abs(pf.vy); }
+      pf.facing = pf.vx >= 0 ? 1 : -1;
     }
 
     for (const b of bubbles) {
@@ -818,6 +1097,77 @@
           b.x = Math.random() * CFG.logicWidth;
         }
       }
+    }
+
+    // ===== 音符オーラ（🎧効果中） =====
+    if (player && player.musicTimer > 0 && state === "playing") {
+      player.musicTimer -= dt;
+      if (player.musicTimer < 0) player.musicTimer = 0;
+
+      // 一定間隔で🐟から全方位ランダムに音符を放出。🎵と🎶を交互に。
+      player.noteAcc += dt;
+      while (player.noteAcc >= CFG.noteEmitInterval && notes.length < CFG.maxNotes) {
+        player.noteAcc -= CFG.noteEmitInterval;
+        for (let k = 0; k < CFG.noteEmitPerTick && notes.length < CFG.maxNotes; k++) {
+          const ang = Math.random() * Math.PI * 2;
+          player.nextNoteBig = !player.nextNoteBig;
+          const ox = Math.cos(ang) * 6, oy = Math.sin(ang) * 6;
+          notes.push(makeNote(player.x + ox, player.y + oy, ang, player.nextNoteBig));
+        }
+      }
+    }
+
+    // 音符の移動・寿命・敵ヒット。
+    const rangeSq = CFG.noteRange * CFG.noteRange;
+    for (const n of notes) {
+      if (!n.active) continue;
+      n.x += n.vx * dt;
+      n.y += n.vy * dt;
+      n.rot += n.spin * dt;
+
+      // 🐟から離れすぎたら消える（近距離オーラ）。
+      if (player) {
+        const ddx = n.x - player.x, ddy = n.y - player.y;
+        if (ddx * ddx + ddy * ddy > rangeSq) { n.active = false; continue; }
+      }
+
+      // 🐚以外の active な敵に当たると、敵と音符の両方が消える（クジラはHP制）。
+      let consumed = false;
+      for (const c of crabs) {
+        if (!c.active) continue;
+        const dx = n.x - c.x, dy = n.y - c.y, rr = n.r + c.r;
+        if (dx * dx + dy * dy < rr * rr) { c.active = false; spawnPopParticles(c.x, c.y); consumed = true; break; }
+      }
+      if (consumed) { n.active = false; continue; }
+      for (const sh of sharks) {
+        if (!sh.active) continue;
+        const dx = n.x - sh.x, dy = n.y - sh.y, rr = n.r + sh.r;
+        if (dx * dx + dy * dy < rr * rr) { sh.active = false; spawnPopParticles(sh.x, sh.y); consumed = true; break; }
+      }
+      if (consumed) { n.active = false; continue; }
+      for (const pf of puffers) {
+        if (!pf.active) continue;
+        const dx = n.x - pf.x, dy = n.y - pf.y, rr = n.r + pf.r;
+        if (dx * dx + dy * dy < rr * rr) { pf.active = false; spawnPopParticles(pf.x, pf.y); consumed = true; break; }
+      }
+      if (consumed) { n.active = false; continue; }
+      for (const wh of whales) {
+        if (!wh.active) continue;
+        const dx = n.x - wh.x, dy = n.y - wh.y, rr = n.r + wh.r;
+        if (dx * dx + dy * dy < rr * rr) {
+          wh.hp -= 1;
+          spawnPopParticles(n.x, n.y);
+          if (wh.hp <= 0) { wh.active = false; spawnPopParticles(wh.x, wh.y); }
+          consumed = true;
+          break;
+        }
+      }
+      if (consumed) { n.active = false; continue; }
+    }
+
+    // 🎧 のふわふわ演出だけ更新（当たり判定は updatePhysics 側）。
+    for (const pu of powerups) {
+      if (pu.active) pu.bob += dt * 2;
     }
 
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -868,6 +1218,9 @@
     shake = 0.35;
     dim = 0.7;
     if (player) {
+      player.musicTimer = 0;
+      player.noteAcc = 0;
+      notes.length = 0;
       deathFish = {
         x: player.x,
         y: player.y,
@@ -876,7 +1229,6 @@
         rot: 0,
         vr: (Math.random() < 0.5 ? -1 : 1) * CFG.gameOverFallSpin,
         facing: player.facing || 1,
-        life: 1,
       };
       spawnDeathBubbles(player.x, player.y);
     }
@@ -890,10 +1242,12 @@
 
   // ===== Drawing =====
   function drawBackground() {
-    const grad = ctx.createLinearGradient(0, 0, 0, CFG.logicHeight);
-    grad.addColorStop(0, "#0a2e5c");
-    grad.addColorStop(1, "#020714");
-    ctx.fillStyle = grad;
+    if (!bgGradient) {
+      bgGradient = ctx.createLinearGradient(0, 0, 0, CFG.logicHeight);
+      bgGradient.addColorStop(0, "#0a2e5c");
+      bgGradient.addColorStop(1, "#020714");
+    }
+    ctx.fillStyle = bgGradient;
     ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
 
     const surfaceScreenY = 0 - cameraY;
@@ -929,11 +1283,15 @@
     ctx.save();
     const alpha = Math.min(1, 0.25 + topDanger * 0.75);
 
-    const grad = ctx.createLinearGradient(0, 0, 0, 96);
-    grad.addColorStop(0, `rgba(0, 3, 10, ${0.72 * alpha})`);
-    grad.addColorStop(1, "rgba(0, 3, 10, 0)");
-    ctx.fillStyle = grad;
+    if (!dangerGradient) {
+      dangerGradient = ctx.createLinearGradient(0, 0, 0, 96);
+      dangerGradient.addColorStop(0, "rgba(0, 3, 10, 0.72)");
+      dangerGradient.addColorStop(1, "rgba(0, 3, 10, 0)");
+    }
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = dangerGradient;
     ctx.fillRect(0, 0, CFG.logicWidth, 110);
+    ctx.globalAlpha = 1;
 
     ctx.fillStyle = `rgba(185, 238, 255, ${0.25 + 0.45 * topDanger})`;
     for (const b of dangerBubbles) {
@@ -975,64 +1333,86 @@
   }
 
   function drawShells() {
-    ctx.font = CFG.shellEmojiSize + "px sans-serif";
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    const sp = SPRITES.shell;
     for (const s of shells) {
       if (!s.active) continue;
       const sy = s.y - cameraY;
       if (sy < -20 || sy > CFG.logicHeight + 20) continue;
-      ctx.fillText("🐚", s.x, sy);
+      drawSprite(sp, s.x, sy, -1, 1, 0);
+    }
+  }
+
+  function drawPowerups() {
+    const sp = SPRITES.phones;
+    for (const pu of powerups) {
+      if (!pu.active) continue;
+      const sy = pu.y - cameraY + Math.sin(pu.bob) * 3;   // ゆっくり上下
+      if (sy < -20 || sy > CFG.logicHeight + 20) continue;
+      drawSprite(sp, pu.x, sy, -1, 1, 0);
+    }
+  }
+
+  function drawMusicAura() {
+    if (!player || player.musicTimer <= 0 || state !== "playing") return;
+    const sx = player.x, sy = player.y - cameraY;
+    const pulse = 0.5 + 0.5 * Math.sin(playTime * 6);
+    ctx.save();
+    ctx.globalAlpha = 0.10 + 0.10 * pulse;
+    ctx.strokeStyle = "rgba(150, 240, 255, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx, sy, CFG.noteRange * (0.85 + 0.1 * pulse), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawNotes() {
+    for (const n of notes) {
+      if (!n.active) continue;
+      const sy = n.y - cameraY;
+      if (sy < -20 || sy > CFG.logicHeight + 20) continue;
+      drawSprite(n.big ? SPRITES.note2 : SPRITES.note1, n.x, sy, -1, 0.95, n.rot);
     }
   }
 
   function drawSharks() {
-    ctx.font = CFG.sharkEmojiSize + "px sans-serif";
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    const sp = SPRITES.shark;
     for (const sh of sharks) {
+      if (!sh.active) continue;
       const sy = sh.y - cameraY;
       if (sy < -30 || sy > CFG.logicHeight + 30) continue;
-      ctx.save();
-      ctx.translate(sh.x, sy);
-      // 🦈絵文字も多くの環境で左向きなので、右移動時だけ反転する。
-      if (sh.facing > 0) ctx.scale(-1, 1);
-      ctx.fillText("🦈", 0, 0);
-      ctx.restore();
+      drawSprite(sp, sh.x, sy, sh.facing, 1, 0);
     }
   }
 
   function drawWhales() {
-    ctx.font = CFG.whaleEmojiSize + "px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    const sp = SPRITES.whale;
     for (const wh of whales) {
+      if (!wh.active) continue;
       const sy = wh.y - cameraY;
       if (sy < -120 || sy > CFG.logicHeight + 120) continue;
-      ctx.save();
-      ctx.translate(wh.x, sy);
-      // 🐋絵文字も多くの環境で左向きなので、右移動時だけ反転する。
-      if (wh.facing > 0) ctx.scale(-1, 1);
-      ctx.shadowColor = "rgba(70, 180, 255, 0.32)";
-      ctx.shadowBlur = 18;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText("🐋", 0, 0);
-      ctx.restore();
+      drawSprite(sp, wh.x, sy, wh.facing, 1, 0);
+    }
+  }
+
+  function drawPuffers() {
+    const sp = SPRITES.puffer;
+    for (const pf of puffers) {
+      if (!pf.active) continue;
+      const sy = pf.y - cameraY;
+      if (sy < -90 || sy > CFG.logicHeight + 90) continue;
+      // 最大サイズで焼いたスプライトを、現在の膨張率まで縮小して描く。
+      drawSprite(sp, pf.x, sy, pf.facing, 1, 0, pf.scale);
     }
   }
 
   function drawCrabs() {
-    ctx.font = CFG.crabEmojiSize + "px sans-serif";
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    const sp = SPRITES.crab;
     for (const c of crabs) {
       if (!c.active) continue;
       const sy = c.y - cameraY;
       if (sy < -20 || sy > CFG.logicHeight + 20) continue;
-      ctx.fillText("🦀", c.x, sy);
+      drawSprite(sp, c.x, sy, -1, 1, 0);
     }
   }
 
@@ -1041,24 +1421,13 @@
     const sy = deathFish.y - cameraY;
     if (sy < -80 || sy > CFG.logicHeight + 120) return;
 
+    // 魚本体は焼き込み済みスプライトで描く。
+    drawSprite(SPRITES.fish, deathFish.x, sy, deathFish.facing, 0.9, deathFish.rot);
+
+    // やられた感じを出す小さな気泡。
     ctx.save();
     ctx.translate(deathFish.x, sy);
     ctx.rotate(deathFish.rot);
-    // 🐟絵文字は多くの環境で左向きなので、右移動時だけ反転する。
-    if (deathFish.facing > 0) ctx.scale(-1, 1);
-    ctx.globalAlpha = 0.9;
-    ctx.font = CFG.playerEmojiSize + "px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "rgba(80, 200, 255, 0.40)";
-    ctx.shadowBlur = 5;
-    ctx.fillText("🐟", 0, 0);
-    ctx.shadowBlur = 0;
-    ctx.fillText("🐟", 0, 0);
-
-    // やられた感じを出す小さな気泡。
-    ctx.shadowBlur = 0;
     ctx.globalAlpha = 0.55;
     ctx.fillStyle = "#b9eeff";
     ctx.beginPath();
@@ -1071,47 +1440,28 @@
   function drawPlayer() {
     if (!player) return;
     // 絵文字はサブピクセル位置 + 強いshadowでぼやけやすいので、描画位置を丸める。
+    const sx = Math.round(player.x);
     const sy = Math.round(player.y - cameraY);
-    ctx.save();
-    ctx.translate(Math.round(player.x), sy);
 
     if (player.invuln || state === "intro") {
       ctx.save();
-      ctx.strokeStyle = "rgba(150, 235, 255, 0.70)";
+      ctx.strokeStyle = "rgba(180, 245, 255, 0.85)";
       ctx.lineWidth = 2;
-      ctx.shadowColor = "rgba(90, 210, 255, 0.65)";
-      ctx.shadowBlur = 7;
       ctx.beginPath();
-      ctx.arc(0, 0, CFG.playerEmojiSize * 0.58, 0, Math.PI * 2);
+      ctx.arc(sx, sy, CFG.playerEmojiSize * 0.58, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
 
-    // 🐟絵文字は多くの環境で左向きなので、右移動時だけ反転する。
-    if (player.facing > 0) ctx.scale(-1, 1);
-    ctx.font = CFG.playerEmojiSize + "px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#ffffff";
-
-    // 先に薄い発光を描き、最後に影なしで本体を描くことで輪郭をはっきりさせる。
-    ctx.save();
-    ctx.globalAlpha = 0.55;
-    ctx.shadowColor = "rgba(80, 200, 255, 0.75)";
-    ctx.shadowBlur = 6;
-    ctx.fillText("🐟", 0, 0);
-    ctx.restore();
-
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
-    ctx.fillText("🐟", 0, 0);
-    ctx.restore();
+    // 発光込みで焼いた魚スプライトを、丸めた座標に等倍で描く。
+    drawSprite(SPRITES.fish, sx, sy, player.facing, 1, 0);
   }
 
   function drawParticles() {
     for (const pt of particles) {
       const sy = pt.y - cameraY;
-      ctx.globalAlpha = Math.max(0, pt.life / (pt.maxLife || 1));
+      if (sy < -10 || sy > CFG.logicHeight + 10) continue;
+      ctx.globalAlpha = Math.min(1, Math.max(0, pt.life / (pt.maxLife || 1)));
       ctx.fillStyle = pt.color;
       ctx.beginPath();
       ctx.arc(pt.x, sy, pt.r, 0, Math.PI * 2);
@@ -1133,14 +1483,34 @@
     ctx.textBaseline = "middle";
     ctx.fillText(depth + " scroll", CFG.logicWidth - 18, 25);
 
-    ctx.fillStyle = "rgba(0, 10, 30, 0.55)";
-    ctx.fillRect(10, CFG.logicHeight - 32, 350, 24);
-    ctx.strokeStyle = "rgba(100, 200, 255, 0.25)";
-    ctx.strokeRect(10, CFG.logicHeight - 32, 350, 24);
-    ctx.fillStyle = "#8ecae6";
-    ctx.font = "12px sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("B: 左　F: 右　P: ホップ　N: ダイブ　Esc: 一時停止", 18, CFG.logicHeight - 20);
+    // 🎧効果の残り時間バー。
+    if (player && player.musicTimer > 0) {
+      const ratio = Math.max(0, Math.min(1, player.musicTimer / CFG.musicDuration));
+      const bx = CFG.logicWidth - 140, by = 46, bw = 130, bh = 8;
+      ctx.fillStyle = "rgba(0, 10, 30, 0.6)";
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = "rgba(150, 240, 255, 0.9)";
+      ctx.fillRect(bx, by, bw * ratio, bh);
+      ctx.strokeStyle = "rgba(100, 200, 255, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.fillStyle = "#c2f0ff";
+      ctx.font = "11px sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("🎧 " + player.musicTimer.toFixed(1) + "s", bx + bw, by - 1);
+    }
+
+    if (helpVisible && helpTimer > 0) {
+      ctx.fillStyle = "rgba(0, 10, 30, 0.55)";
+      ctx.fillRect(10, CFG.logicHeight - 32, 350, 24);
+      ctx.strokeStyle = "rgba(100, 200, 255, 0.25)";
+      ctx.strokeRect(10, CFG.logicHeight - 32, 350, 24);
+      ctx.fillStyle = "#8ecae6";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("←: 左　→: 右　↑: ホップ　↓: ダイブ　Esc: 一時停止　?: ヘルプ", 18, CFG.logicHeight - 20);
+    }
   }
 
   function drawStartBanner() {
@@ -1193,10 +1563,12 @@
     const best = Math.floor(bestDepth / CFG.scrollUnit);
     ctx.fillStyle = "#5c9ebf";
     ctx.fillText("ベスト深度：" + best + " scroll", CFG.logicWidth / 2, CFG.logicHeight * 0.78);
+    ctx.fillStyle = "#3d7a9c";
+    ctx.fillText("Shift+3 でベスト深度リセット", CFG.logicWidth / 2, CFG.logicHeight * 0.84);
 
     if (!focus) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-      ctx.fillText("ゲーム画面をクリックして操作", CFG.logicWidth / 2, CFG.logicHeight * 0.88);
+      ctx.fillText("ゲーム画面をクリックして操作", CFG.logicWidth / 2, CFG.logicHeight * 0.92);
     }
     ctx.restore();
   }
@@ -1318,12 +1690,19 @@
           startBannerTimer -= step;
           if (startBannerTimer < 0) startBannerTimer = 0;
         }
+        if (helpTimer > 0) {
+          helpTimer -= step;
+          if (helpTimer < 0) helpTimer = 0;
+        }
         updatePhysics(step);
-        updateCameraAndScroll(step);
-        updateEntities(step);
-        playTime += step;
-        generateUntil(cameraY + CFG.logicHeight + 200);
-        cleanup(cameraY);
+        if (state === "playing") updateCameraAndScroll(step);
+        if (state === "playing") {
+          updateEntities(step);
+          playTime += step;
+          generateUntil(cameraY + CFG.logicHeight + 200);
+          spawnPowerupIfDue();
+          cleanup(cameraY);
+        }
       } else if (state === "gameover") {
         updateEntities(step);
         updateDeathFish(step);
@@ -1343,11 +1722,15 @@
     drawBubbles();
     drawPlatforms();
     drawShells();
+    drawPowerups();
     drawCrabs();
     drawSharks();
+    drawPuffers();
     drawWhales();
+    drawMusicAura();
     if (state === "gameover") drawDeathFish();
     else drawPlayer();
+    drawNotes();
     drawParticles();
     drawTopDanger();
     drawHUD();
