@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>深海潜行 遊び方 — Abyss Hop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #08171c;
+    --bg-2: #0c2229;
+    --surface: #123038;
+    --surface-2: #184049;
+    --ink: #eef6f2;
+    --ink-dim: #b7cfc8;
+    --muted: #7f9e98;
+    --line: color-mix(in oklab, var(--ink) 14%, transparent);
+    --lamp: #e8c15a;
+    --lamp-deep: #c4922a;
+    --lamp-weak: color-mix(in oklab, var(--lamp) 16%, var(--surface));
+    --bio: #4ecdc4;
+    --bio-weak: color-mix(in oklab, var(--bio) 16%, var(--surface));
+    --danger: #e05a5a;
+    --danger-weak: color-mix(in oklab, var(--danger) 16%, var(--surface));
+    --safe: #7dcc8a;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(0,0,0,.28), 0 18px 40px -22px rgba(0,0,0,.7);
+    --step-0: clamp(0.95rem, 0.9rem + 0.28vw, 1.05rem);
+    --step-1: clamp(1.08rem, 1rem + 0.45vw, 1.28rem);
+    --step-2: clamp(1.35rem, 1.15rem + 1vw, 1.85rem);
+    --step-3: clamp(2.1rem, 1.5rem + 3vw, 3.6rem);
+    --space: clamp(1rem, 0.8rem + 1vw, 1.5rem);
+    --display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+    --heading: "Zen Maru Gothic", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+    --sans: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: var(--step-0);
+    line-height: 1.85;
+    color: var(--ink);
+    background:
+      radial-gradient(900px 480px at 88% -10%, #163a42 0%, transparent 58%),
+      radial-gradient(700px 420px at -8% 8%, #102f28 0%, transparent 50%),
+      linear-gradient(180deg, #0c2229 0%, #08171c 48%, #061116 100%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 72rem; margin: 0 auto; padding: 0 clamp(1rem, 3vw, 2.2rem); }
+
+  .depth-mark { position: relative; }
+  .depth-mark::before {
+    content: "";
+    position: absolute;
+    left: calc(-1 * clamp(0.6rem, 2vw, 1.4rem));
+    top: 0.35rem;
+    width: 11px;
+    height: 11px;
+    border: 2px solid var(--lamp);
+    border-radius: 50%;
+    background: var(--bg);
+    box-shadow: 0 0 0 4px var(--bg);
+  }
+
+  header.hero {
+    position: relative;
+    overflow: hidden;
+    padding: clamp(2.8rem, 7vw, 5.4rem) 0 1.6rem;
+    isolation: isolate;
+  }
+
+  /* ヘッダーは水槽。タイトルは左、右側を遊泳レーンにする。操作パネルには重ねない。 */
+  .sea {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 0%, #000 52%, transparent 88%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 52%, transparent 88%);
+  }
+  .sea-glow {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(120% 85% at 80% -12%, rgba(120, 210, 220, 0.15), transparent 62%),
+      radial-gradient(85% 65% at 12% -4%, rgba(78, 205, 196, 0.10), transparent 58%),
+      radial-gradient(60% 45% at 55% 34%, rgba(232, 193, 90, 0.05), transparent 70%);
+  }
+  .sea-haze {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(8, 23, 28, 0.6) 0%, rgba(8, 23, 28, 0.18) 45%, transparent 68%);
+  }
+
+  .bubble {
+    position: absolute;
+    left: var(--x);
+    bottom: -8%;
+    width: var(--r);
+    height: var(--r);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.55), rgba(180, 230, 240, 0.08) 55%, transparent 70%);
+    border: 1px solid rgba(190, 240, 255, 0.18);
+    opacity: 0.45;
+  }
+
+  .swimmer {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    font-size: var(--size);
+    line-height: 1;
+    filter: drop-shadow(0 0 10px color-mix(in oklab, var(--bio) 35%, transparent));
+    will-change: transform;
+    user-select: none;
+  }
+  .swimmer .body {
+    display: block;
+    transform-origin: center;
+  }
+  .face-right { transform: scaleX(-1); }
+  .s-whale { opacity: 0.42; z-index: 1; filter: drop-shadow(0 0 18px rgba(70, 180, 255, 0.28)); }
+  .s-shark { opacity: 0.86; z-index: 3; }
+  .s-fish { opacity: 1; z-index: 5; }
+  .s-puffer { opacity: 0.92; z-index: 4; }
+  .s-crab, .s-shell { z-index: 6; }
+  .s-note { opacity: 0.8; z-index: 7; filter: drop-shadow(0 0 8px rgba(160, 240, 255, 0.45)); }
+
+  header.hero .wrap { position: relative; z-index: 1; }
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-family: var(--heading);
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--lamp);
+    border: 1.5px dashed color-mix(in oklab, var(--lamp) 55%, transparent);
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--lamp) 8%, var(--bg));
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: var(--step-3);
+    font-weight: 400;
+    line-height: 1.12;
+    margin: 0.9rem 0 0.35rem;
+    letter-spacing: 0.04em;
+    font-feature-settings: "palt";
+    text-shadow: 0 2px 18px rgba(8, 23, 28, 0.85);
+  }
+  .hero-en {
+    font-family: var(--heading);
+    font-weight: 700;
+    color: var(--bio);
+    letter-spacing: 0.18em;
+    font-size: 0.82rem;
+    margin: 0 0 1.1rem;
+    text-shadow: 0 2px 14px rgba(8, 23, 28, 0.8);
+  }
+  .lede {
+    max-width: 46ch;
+    color: var(--ink-dim);
+    font-size: var(--step-1);
+    margin: 0;
+    text-shadow: 0 2px 16px rgba(8, 23, 28, 0.9);
+  }
+  .cast {
+    margin-top: 1.4rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.15rem;
+    font-size: clamp(1.5rem, 3.6vw, 2.1rem);
+    filter: drop-shadow(0 0 12px color-mix(in oklab, var(--bio) 45%, transparent));
+  }
+  .cast span { padding: 0 0.18em; }
+
+  .plate {
+    position: relative;
+    z-index: 2;
+    margin: 2.2rem 0 0;
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--lamp) 10%, var(--surface)) 0%, var(--surface) 40%);
+    border: 2px solid color-mix(in oklab, var(--lamp) 55%, transparent);
+    border-radius: 4px 18px 4px 18px;
+    box-shadow: var(--shadow), inset 0 0 0 1px color-mix(in oklab, var(--lamp) 18%, transparent);
+    padding: clamp(1.1rem, 2vw, 1.5rem);
+  }
+  .plate h2 {
+    font-family: var(--heading);
+    font-size: 0.82rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--lamp);
+    margin: 0 0 1rem;
+    font-weight: 700;
+  }
+
+  main { padding-bottom: 4.5rem; }
+  section {
+    padding: clamp(1.8rem, 4vw, 2.8rem) 0;
+    border-top: 1px solid var(--line);
+  }
+  h2 {
+    font-family: var(--heading);
+    font-size: var(--step-2);
+    font-weight: 900;
+    margin: 0 0 1rem;
+    letter-spacing: 0.02em;
+    line-height: 1.25;
+    font-feature-settings: "palt";
+  }
+  h3 {
+    font-family: var(--heading);
+    font-size: var(--step-1);
+    font-weight: 700;
+    margin: 1.4rem 0 0.55rem;
+  }
+  p { margin: 0 0 0.9rem; color: var(--ink-dim); }
+  strong { color: #fff; font-weight: 700; }
+
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.55rem;
+  }
+  .key {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+    align-items: center;
+    background: color-mix(in oklab, var(--bg) 55%, transparent);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.65rem 0.8rem;
+  }
+  kbd {
+    display: inline-block;
+    min-width: 1.7em;
+    padding: 0.12em 0.42em;
+    border: 1px solid color-mix(in oklab, var(--lamp) 50%, transparent);
+    border-bottom-width: 3px;
+    border-radius: 6px;
+    background: #1b2c22;
+    color: var(--lamp);
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .key .act { color: var(--ink); font-weight: 600; font-size: 0.92rem; }
+  .key .sub { color: var(--muted); font-size: 0.78rem; display: block; }
+
+  .note {
+    border-left: 3px solid var(--lamp);
+    background: var(--lamp-weak);
+    padding: 0.8rem 1.1rem;
+    border-radius: 0 10px 10px 0;
+    color: var(--ink-dim);
+    margin: 1rem 0 0;
+  }
+  .note.bio {
+    border-left-color: var(--bio);
+    background: var(--bio-weak);
+  }
+  .note.danger {
+    border-left-color: var(--danger);
+    background: var(--danger-weak);
+  }
+
+  .endings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.8rem;
+  }
+  .ending {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    box-shadow: var(--shadow);
+  }
+  .ending .mark {
+    font-family: var(--heading);
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.16em;
+    color: var(--danger);
+    margin: 0 0 0.35rem;
+  }
+  .ending h3 { margin: 0 0 0.35rem; }
+  .ending p { margin: 0; font-size: 0.92rem; }
+
+  .bestiary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0.9rem;
+  }
+  article.spec {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.15rem 1.15rem;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  article.spec::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border: 1px dashed color-mix(in oklab, var(--ink) 10%, transparent);
+    border-radius: 8px;
+    pointer-events: none;
+  }
+  .spec-top {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    margin-bottom: 0.45rem;
+  }
+  .glyph {
+    font-size: 2.1rem;
+    line-height: 1;
+    filter: drop-shadow(0 0 10px color-mix(in oklab, var(--bio) 40%, transparent));
+  }
+  .spec h3 { margin: 0; font-size: 1.15rem; }
+  .cat {
+    margin-left: auto;
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .spec p { margin: 0 0 0.7rem; font-size: 0.92rem; position: relative; z-index: 1; }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    position: relative;
+    z-index: 1;
+  }
+  .pill {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 0.18em 0.55em;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    color: var(--ink-dim);
+  }
+  .pill.harm { color: #ffd0d0; border-color: color-mix(in oklab, var(--danger) 40%, transparent); background: var(--danger-weak); }
+  .pill.ok { color: #d8ffe0; border-color: color-mix(in oklab, var(--safe) 40%, transparent); background: color-mix(in oklab, var(--safe) 14%, var(--surface)); }
+  .pill.item { color: var(--lamp); border-color: color-mix(in oklab, var(--lamp) 40%, transparent); background: var(--lamp-weak); }
+  .pill.you { color: var(--bio); border-color: color-mix(in oklab, var(--bio) 40%, transparent); background: var(--bio-weak); }
+
+  .table-scroll {
+    overflow-x: auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.92rem;
+    min-width: 520px;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  thead th {
+    background: var(--surface-2);
+    color: var(--lamp);
+    font-family: var(--heading);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+  }
+  tbody tr:nth-child(even) { background: color-mix(in oklab, var(--surface) 55%, transparent); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.emoji { font-size: 1.35rem; width: 2.4rem; }
+
+  .tips {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0.8rem;
+  }
+  .tip {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+  }
+  .tip h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+  .tip p { margin: 0; font-size: 0.9rem; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 1.6rem 0 2.6rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  footer .wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.4rem;
+    justify-content: space-between;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hero h1, .hero .stamp, .lede, .cast, .plate {
+      animation: rise 0.7s ease both;
+    }
+    .hero .stamp { animation-delay: 0.05s; }
+    .hero h1 { animation-delay: 0.12s; }
+    .hero-en { animation: rise 0.7s ease both 0.18s; }
+    .lede { animation-delay: 0.24s; }
+    .cast { animation-delay: 0.32s; }
+    .plate { animation-delay: 0.4s; }
+
+    .s-whale { animation: swim-left 48s linear infinite, bob 6.4s ease-in-out infinite; animation-delay: -18s, 0s; }
+    .s-shark { animation: swim-right 22s linear infinite, bob 3.8s ease-in-out infinite; animation-delay: -9s, -1.2s; }
+    .s-fish { animation: swim-right 16s linear infinite, bob 2.8s ease-in-out infinite; animation-delay: -4s, 0s; }
+    .s-puffer { animation: swim-left 28s linear infinite; animation-delay: -11s; }
+    .s-puffer .body { animation: breathe 2.2s ease-in-out infinite; }
+    .s-crab { animation: patrol 7.5s ease-in-out infinite; }
+    .s-shell { animation: settle 5s ease-in-out infinite; }
+    .s-note.n1 { animation: note-orbit 5.6s linear infinite; }
+    .s-note.n2 { animation: note-orbit 6.4s linear infinite reverse; animation-delay: -2s; }
+    .s-note.n3 { animation: note-drift 4.8s ease-in-out infinite; animation-delay: -1.4s; }
+
+    .bubble { animation: bubble-up var(--dur) linear infinite; animation-delay: var(--delay); }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes swim-right {
+      0% { transform: translateX(-42vw); }
+      100% { transform: translateX(38vw); }
+    }
+    @keyframes swim-left {
+      0% { transform: translateX(36vw); }
+      100% { transform: translateX(-48vw); }
+    }
+    @keyframes bob {
+      0%, 100% { margin-top: 0; }
+      50% { margin-top: -10px; }
+    }
+    @keyframes breathe {
+      0%, 100% { transform: scale(0.72); }
+      50% { transform: scale(1.05); }
+    }
+    @keyframes patrol {
+      0%, 100% { transform: translateX(0); }
+      50% { transform: translateX(7.5rem); }
+    }
+    @keyframes settle {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(3px); }
+    }
+    @keyframes note-orbit {
+      0% { transform: rotate(0deg) translateX(2.4rem) rotate(0deg); opacity: 0.15; }
+      18% { opacity: 0.9; }
+      82% { opacity: 0.9; }
+      100% { transform: rotate(360deg) translateX(2.4rem) rotate(-360deg); opacity: 0.15; }
+    }
+    @keyframes note-drift {
+      0% { transform: translate(0, 0) scale(0.8); opacity: 0; }
+      20% { opacity: 0.9; }
+      100% { transform: translate(3.2rem, -2.4rem) scale(1.05); opacity: 0; }
+    }
+    @keyframes bubble-up {
+      0% { transform: translate3d(0, 8px, 0); opacity: 0; }
+      12% { opacity: 0.45; }
+      100% { transform: translate3d(12px, -28rem, 0); opacity: 0; }
+    }
+  }
+
+  @media print {
+    body { background: #fff; color: #111; }
+    .sea { display: none; }
+    .cast { filter: none; }
+    p, .lede, .key .sub, .ending p, .spec p, .tip p { color: #333; }
+    .plate, article.spec, .ending, .tip, .table-scroll { box-shadow: none; break-inside: avoid; }
+    header.hero { padding-top: 0; }
+    section { break-inside: avoid; }
+  }
+  @page { size: A4; margin: 14mm; }
+
+  @media (max-width: 720px) {
+    .sea {
+      mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 62%);
+      -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 62%);
+    }
+    .sea .swimmer { opacity: 0.4; }
+    .s-whale { opacity: 0.22; }
+    .depth-mark::before { display: none; }
+    kbd { font-size: 0.72rem; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="sea" aria-hidden="true">
+    <div class="sea-glow"></div>
+    <div class="sea-haze"></div>
+
+    <span class="bubble" style="--x:12%; --r:7px; --dur:11s; --delay:-2s;"></span>
+    <span class="bubble" style="--x:28%; --r:5px; --dur:9s; --delay:-6s;"></span>
+    <span class="bubble" style="--x:47%; --r:9px; --dur:13s; --delay:-1s;"></span>
+    <span class="bubble" style="--x:61%; --r:4px; --dur:8s; --delay:-4.5s;"></span>
+    <span class="bubble" style="--x:73%; --r:6px; --dur:12s; --delay:-8s;"></span>
+    <span class="bubble" style="--x:84%; --r:8px; --dur:10s; --delay:-3s;"></span>
+    <span class="bubble" style="--x:91%; --r:5px; --dur:14s; --delay:-7s;"></span>
+    <span class="bubble" style="--x:38%; --r:3px; --dur:7s; --delay:-5s;"></span>
+
+    <span class="swimmer s-whale" style="--x:62%; --y:4%; --size:4.6rem;"><span class="body">🐋</span></span>
+    <span class="swimmer s-shark" style="--x:54%; --y:17%; --size:2.25rem;"><span class="body face-right">🦈</span></span>
+    <span class="swimmer s-puffer" style="--x:78%; --y:26%; --size:2.55rem;"><span class="body">🐡</span></span>
+    <span class="swimmer s-fish" style="--x:58%; --y:11%; --size:2.15rem;"><span class="body face-right">🐟</span></span>
+    <span class="swimmer s-note n1" style="--x:58%; --y:11%; --size:1.05rem;"><span class="body">🎵</span></span>
+    <span class="swimmer s-note n2" style="--x:58%; --y:11%; --size:1.45rem;"><span class="body">🎶</span></span>
+    <span class="swimmer s-note n3" style="--x:64%; --y:14%; --size:1.1rem;"><span class="body">🎵</span></span>
+    <span class="swimmer s-crab" style="--x:54%; --y:44%; --size:1.55rem;"><span class="body">🦀</span></span>
+    <span class="swimmer s-shell" style="--x:66%; --y:44%; --size:1.45rem;"><span class="body">🐚</span></span>
+  </div>
+
+  <div class="wrap">
+    <span class="stamp">遊び方 / How to play</span>
+    <h1>深海潜行</h1>
+    <p class="hero-en">ABYSS HOP</p>
+    <p class="lede">🐟を操作し、海流面を足場にしながら、できるだけ深く潜り続けるゲームです。画面はひとりでに下へ進みます。上へ流されすぎても、下へ落ちすぎても終わりです。</p>
+    <div class="cast" aria-hidden="true">
+      <span>🐟</span><span>🐚</span><span>🦀</span><span>🦈</span><span>🐡</span><span>🐋</span><span>🎧</span><span>🎵</span>
+    </div>
+
+    <div class="plate">
+      <h2>操作</h2>
+      <div class="keys">
+        <div class="key"><div><kbd>B</kbd> / <kbd>←</kbd></div><div><span class="act">左へ移動</span><span class="sub">接地中のみ加速します</span></div></div>
+        <div class="key"><div><kbd>F</kbd> / <kbd>→</kbd></div><div><span class="act">右へ移動</span><span class="sub">空中では左右に加速できません</span></div></div>
+        <div class="key"><div><kbd>P</kbd> / <kbd>↑</kbd></div><div><span class="act">ホップ</span><span class="sub">足場に乗っているときだけ</span></div></div>
+        <div class="key"><div><kbd>N</kbd> / <kbd>↓</kbd></div><div><span class="act">ダイブ</span><span class="sub">接地中と、空中で1回</span></div></div>
+        <div class="key"><div><kbd>Enter</kbd></div><div><span class="act">スタート</span><span class="sub">ゲームオーバー後も再開できます</span></div></div>
+        <div class="key"><div><kbd>R</kbd></div><div><span class="act">再スタート</span><span class="sub">ゲームオーバー画面のみ</span></div></div>
+        <div class="key"><div><kbd>Space</kbd></div><div><span class="act">再開</span><span class="sub">一時停止中</span></div></div>
+        <div class="key"><div><kbd>Esc</kbd></div><div><span class="act">一時停止 / タイトルへ</span><span class="sub">プレイ中は停止、停止中と終了後はタイトル</span></div></div>
+        <div class="key"><div><kbd>?</kbd></div><div><span class="act">操作案内の表示切替</span><span class="sub">開始直後、画面下に約20秒出ます</span></div></div>
+        <div class="key"><div><kbd>Shift</kbd>+<kbd>3</kbd></div><div><span class="act">ベスト深度リセット</span><span class="sub">タイトル画面のみ</span></div></div>
+      </div>
+      <p class="note">クリックはゲーム画面へフォーカスを当てるためだけに使います。開始・再開はキー操作です。画面からフォーカスが外れると、自動で一時停止します。</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+<section>
+  <h2 class="depth-mark">目的</h2>
+  <p>海流面に乗りながら、できるだけ長く、できるだけ深く潜ることです。到達した深さは画面右上に <strong>scroll</strong> 単位で表示されます。ベスト深度はブラウザに保存され、次回もタイトル画面に出ます。</p>
+  <p>敵を全滅させるゲームではありません。障害をよけ、必要なときだけ🎧を取りに行き、画面の流れに置いていかれないことが勝負です。</p>
+</section>
+
+<section>
+  <h2 class="depth-mark">終わり方</h2>
+  <div class="endings">
+    <div class="ending">
+      <p class="mark">接触</p>
+      <h3>敵や貝に触れる</h3>
+      <p>🐚🦀🦈🐡🐋のどれかに触れると終了です。🎧はダメージではありません。</p>
+    </div>
+    <div class="ending">
+      <p class="mark">上部</p>
+      <h3>上へ流されすぎる</h3>
+      <p>画面上に隠れすぎると終わります。少し隠れただけでは即終了せず、「上へ流されている」の警告が出ます。</p>
+    </div>
+    <div class="ending">
+      <p class="mark">落下</p>
+      <h3>画面の下へ落ちる</h3>
+      <p>足場を外して画面下へ落ちすぎても終了です。下方向のダイブは深い位置へ進む手段ですが、抜けすぎに注意。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2 class="depth-mark">登場するもの</h2>
+  <p>この海に出る相手は、次の6種です。触れるとすべて終了します。音符で消せるかどうかが分かれ目です。</p>
+  <div class="bestiary">
+    <article class="spec">
+      <div class="spec-top">
+        <span class="glyph" aria-hidden="true">🐟</span>
+        <h3>プレイヤー</h3>
+        <span class="cat">YOU</span>
+      </div>
+      <p>操作する魚です。足場の上からホップし、ダイブで下の段へ抜けられます。足場は下から上へ通り抜けられます。開始直後はごく短い無敵時間があります。</p>
+      <div class="meta">
+        <span class="pill you">操作キャラ</span>
+        <span class="pill">空中加速なし</span>
+        <span class="pill">空中ダイブは1回</span>
+      </div>
+    </article>
+
+    <article class="spec">
+      <div class="spec-top">
+        <span class="glyph" aria-hidden="true">🐚</span>
+        <h3>貝</h3>
+        <span class="cat">障害物</span>
+      </div>
+      <p>海流面の上に置かれた動かない障害です。音符では消えません。地形の一部と考えて、乗った先にないか確認してください。序盤から出現します。</p>
+      <div class="meta">
+        <span class="pill harm">触れたら終了</span>
+        <span class="pill">音符無効</span>
+        <span class="pill">約2秒後から</span>
+      </div>
+    </article>
+
+    <article class="spec">
+      <div class="spec-top">
+        <span class="glyph" aria-hidden="true">🦀</span>
+        <h3>カニ</h3>
+        <span class="cat">地上の敵</span>
+      </div>
+      <p>足場の上を左右に往復します。足場から離れません。音符1発で消えます。幅の広い床に出やすいので、着地前に端を見てください。</p>
+      <div class="meta">
+        <span class="pill harm">触れたら終了</span>
+        <span class="pill ok">音符1発</span>
+        <span class="pill">約2.4秒後から</span>
+      </div>
+    </article>
+
+    <article class="spec">
+      <div class="spec-top">
+        <span class="glyph" aria-hidden="true">🦈</span>
+        <h3>サメ</h3>
+        <span class="cat">遊泳する敵</span>
+      </div>
+      <p>水中を自由に泳ぎ、ときどき向きを変えます。画面の外へは出ず、常に視界の中にいます。音符1発で消えます。序盤の後半から出始めます。</p>
+      <div class="meta">
+        <span class="pill harm">触れたら終了</span>
+        <span class="pill ok">音符1発</span>
+        <span class="pill">約2.8秒後から</span>
+      </div>
+    </article>
+
+    <article class="spec">
+      <div class="spec-top">
+        <span class="glyph" aria-hidden="true">🐡</span>
+        <h3>フグ</h3>
+        <span class="cat">中型の敵</span>
+      </div>
+      <p>膨らんだり縮んだりしながら漂います。大きさは🐟の約1.25倍から2倍まで変化し、当たり判定もそれに合わせて変わります。画面の四辺で跳ね返ります。音符1発で消えます。</p>
+      <div class="meta">
+        <span class="pill harm">触れたら終了</span>
+        <span class="pill ok">音符1発</span>
+        <span class="pill">深度100超から</span>
+      </div>
+    </article>
+
+    <article class="spec">
+      <div class="spec-top">
+        <span class="glyph" aria-hidden="true">🐋</span>
+        <h3>クジラ</h3>
+        <span class="cat">大型の敵</span>
+      </div>
+      <p>大きくて遅い移動障害です。画面を大きく占有しますが、動きは読みやすいです。画面内に留まり続けます。音符では3ヒット必要です。中盤から登場します。</p>
+      <div class="meta">
+        <span class="pill harm">触れたら終了</span>
+        <span class="pill ok">音符3発</span>
+        <span class="pill">約24秒後から</span>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section>
+  <h2 class="depth-mark">アイテム</h2>
+  <div class="bestiary">
+    <article class="spec">
+      <div class="spec-top">
+        <span class="glyph" aria-hidden="true">🎧</span>
+        <h3>ヘッドホン</h3>
+        <span class="cat">パワーアップ</span>
+      </div>
+      <p>深度100 scrollごとに、これから向かう広めの足場の上へ1個置かれます。🐟と同じくらいの大きさで、ゆっくり上下します。取ると12秒間、音符オーラが始まります。効果中に再取得すると、残り時間が12秒に戻ります。無敵中でも取れます。ダメージではありません。</p>
+      <div class="meta">
+        <span class="pill item">取得アイテム</span>
+        <span class="pill">効果12秒</span>
+        <span class="pill">100 scrollごと</span>
+      </div>
+    </article>
+
+    <article class="spec">
+      <div class="spec-top">
+        <span class="glyph" aria-hidden="true">🎵</span>
+        <h3>音符</h3>
+        <span class="cat">オーラ攻撃</span>
+      </div>
+      <p>🎧効果中、🐟の周囲へ🎵と🎶が交互に飛びます。🎶のほうが大きく見えますが、当たりの強さは同じです。魚から約105px離れると消えます。画面全体を消す武器ではなく、近づいた相手だけを叩く近距離攻撃です。</p>
+      <div class="meta">
+        <span class="pill item">自動放出</span>
+        <span class="pill">近距離のみ</span>
+        <span class="pill">🐚には無効</span>
+      </div>
+    </article>
+  </div>
+
+  <h3>音符が効く相手</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>名前</th>
+          <th>音符</th>
+          <th>覚え方</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="emoji">🦀</td>
+          <td>カニ</td>
+          <td>1発で消滅</td>
+          <td>足場の往復役。近づいて払う</td>
+        </tr>
+        <tr>
+          <td class="emoji">🦈</td>
+          <td>サメ</td>
+          <td>1発で消滅</td>
+          <td>泳ぎ回る標準的な敵</td>
+        </tr>
+        <tr>
+          <td class="emoji">🐡</td>
+          <td>フグ</td>
+          <td>1発で消滅</td>
+          <td>膨らみ中は当たり判定も大きい</td>
+        </tr>
+        <tr>
+          <td class="emoji">🐋</td>
+          <td>クジラ</td>
+          <td>3発で消滅</td>
+          <td>大きいので、居座らずヒットして離れる</td>
+        </tr>
+        <tr>
+          <td class="emoji">🐚</td>
+          <td>貝</td>
+          <td>効かない</td>
+          <td>音符中でも回避が必要。すり抜ける</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note bio">音符は「今の🐟の位置」から測って消えます。自分が離れると、置いてきた音符もすぐに消えます。敵を消すには、相手のそばまで寄る必要があります。</p>
+</section>
+
+<section>
+  <h2 class="depth-mark">出現の目安</h2>
+  <p>開幕の足場と、すぐ着地する場所は空いています。その少し先には、貝・カニ・サメが最初から置いてあります。</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>いつ</th>
+          <th>何が出るか</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>開始直後</td>
+          <td>足場のみ。操作案内が画面下に出ます。短い無敵時間があります。</td>
+        </tr>
+        <tr>
+          <td>約2.0秒</td>
+          <td>🐚 貝が足場に出始めます。</td>
+        </tr>
+        <tr>
+          <td>約2.4秒</td>
+          <td>🦀 カニが足場を歩き始めます。</td>
+        </tr>
+        <tr>
+          <td>約2.8秒</td>
+          <td>🦈 サメが泳ぎ始めます。</td>
+        </tr>
+        <tr>
+          <td>約24秒</td>
+          <td>🐋 クジラが登場します。</td>
+        </tr>
+        <tr>
+          <td>深度 100 scroll 超</td>
+          <td>🐡 フグが登場します。</td>
+        </tr>
+        <tr>
+          <td>深度 100, 200, 300…</td>
+          <td>🎧 が、これから向かう広めの足場へ1個置かれます。置き場所がなければ、その回は出ません。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2 class="depth-mark">覚えておくこと</h2>
+  <div class="tips">
+    <div class="tip">
+      <h3>空中では曲がれない</h3>
+      <p>左右の加速は接地中だけです。ジャンプの前に向きと速度を決めてください。</p>
+    </div>
+    <div class="tip">
+      <h3>ダイブは貫通する</h3>
+      <p>↓は今乗っている足場を抜けて下へ落ちます。空中でももう1回だけ使えます。着地すると空中分は回復します。</p>
+    </div>
+    <div class="tip">
+      <h3>画面の上に居座らない</h3>
+      <p>カメラは自動で下へ進みます。上端で粘ると流されます。警告が出たら、すぐ下の足場へ乗るかダイブしてください。</p>
+    </div>
+    <div class="tip">
+      <h3>🎧は取りに行く判断</h3>
+      <p>床の上にあるので、敵のいる足場へ乗ることになります。効果は近距離だけなので、取ったあとも位置取りが必要です。</p>
+    </div>
+    <div class="tip">
+      <h3>貝は消えない</h3>
+      <p>音符中でも🐚は残ります。効果時間中に油断して乗るのが一番危ないです。</p>
+    </div>
+    <div class="tip">
+      <h3>フグは大きさで当たる</h3>
+      <p>縮んでいるときは隙間ができます。膨らみきった瞬間に横切ると、見た目どおり判定も大きいです。</p>
+    </div>
+  </div>
+  <p class="note danger">ゲームオーバー後は Enter または R でもう一度、Esc でタイトルに戻れます。タイトルでは Shift+3 でベスト深度を消せます。</p>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>深海潜行 — Abyss Hop / 遊び方</span>
+    <span>単一HTMLで動作　·　表示は4:3　·　ベスト深度はブラウザに保存</span>
+  </div>
+</footer>
+</body>
+</html>

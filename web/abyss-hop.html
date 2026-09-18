@@ -55,12 +55,38 @@
   #focus-hint.show {
     opacity: 1;
   }
+  #manual-link {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 6;
+    padding: 6px 12px;
+    border: 1px solid #1b6f9c;
+    border-radius: 999px;
+    background: rgba(0, 10, 30, 0.72);
+    color: #8fd7ff;
+    font-size: 12px;
+    text-decoration: none;
+    letter-spacing: 0.06em;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s;
+  }
+  #manual-link.show {
+    opacity: 1;
+    visibility: visible;
+  }
+  #manual-link:hover {
+    background: rgba(0, 20, 45, 0.9);
+    color: #c2f0ff;
+  }
 </style>
 </head>
 <body>
 <div id="game-wrapper">
   <canvas id="gameCanvas" tabindex="0"></canvas>
   <div id="focus-hint">ゲーム画面をクリックして操作</div>
+<a id="manual-link" href="manual.html" target="_blank" rel="noopener">📖 遊び方・説明書</a>
 </div>
 <script>
 (() => {
@@ -148,6 +174,7 @@
   const canvas = document.getElementById("gameCanvas");
   const wrapper = document.getElementById("game-wrapper");
   const focusHint = document.getElementById("focus-hint");
+  const manualLink = document.getElementById("manual-link");
   const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 
   let state = "title";
@@ -1628,12 +1655,25 @@
   }
 
   // ===== Main loop =====
+  // 説明書リンクはタイトルとゲームオーバーの時だけ出す。
+  // プレイ中・一時停止中・開始演出中は誤クリック防止のため表示しない。
+  let manualShown = false;
+  function syncManualLink() {
+    const show = state === "title" || state === "gameover";
+    if (show !== manualShown) {
+      manualShown = show;
+      manualLink.classList.toggle("show", show);
+    }
+  }
+
   function frame(now) {
     requestAnimationFrame(frame);
     if (!lastTime) lastTime = now;
     let dt = (now - lastTime) / 1000;
     lastTime = now;
     if (dt > 0.5) dt = 0.5;
+
+    syncManualLink();
 
     if (state === "title") {
       drawTitle();
