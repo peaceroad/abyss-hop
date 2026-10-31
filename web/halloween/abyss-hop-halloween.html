@@ -1,0 +1,2777 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>魔女の降下 - Witch Hop</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: radial-gradient(circle at 50% 0%, #2a1245 0%, #12071f 45%, #05010a 100%);
+    color: #ffe9d6;
+    font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Meiryo", sans-serif;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #game-wrapper {
+    position: relative;
+    width: min(100vw, calc(100dvh * 4 / 3));
+    height: min(100dvh, calc(100vw * 3 / 4));
+    aspect-ratio: 4 / 3;
+    box-sizing: border-box;
+    background: #05010a;
+    box-shadow: 0 0 60px rgba(255, 120, 0, 0.16), 0 0 140px rgba(140, 40, 220, 0.14);
+    border: 2px solid #3d1c5c;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: auto; }
+  #focus-hint {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(26, 8, 42, 0.9);
+    border: 1px solid #7a3ca8;
+    padding: 12px 20px; border-radius: 6px;
+    font-size: 14px; color: #e0b6ff;
+    pointer-events: none; opacity: 0;
+    transition: opacity 0.3s; z-index: 10;
+  }
+  #focus-hint.show { opacity: 1; }
+  #manual-link, #abyss-link {
+    position: absolute; bottom: 10px; z-index: 6;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px; text-decoration: none;
+    letter-spacing: 0.06em;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.25s;
+  }
+  #manual-link {
+    right: 10px;
+    border: 1px solid rgba(255, 150, 60, 0.55);
+    background: rgba(30, 10, 45, 0.78);
+    color: #ffc98a;
+  }
+  #manual-link:hover { background: rgba(50, 18, 70, 0.92); color: #ffe3bf; }
+  #abyss-link {
+    left: 10px;
+    border: 1px solid rgba(90, 180, 255, 0.45);
+    background: rgba(8, 18, 34, 0.78);
+    color: #9fd4ff;
+  }
+  #abyss-link:hover { background: rgba(12, 28, 52, 0.92); color: #d0ebff; }
+  #manual-link.show, #abyss-link.show { opacity: 1; visibility: visible; }
+</style>
+</head>
+<body>
+<div id="game-wrapper">
+  <canvas id="gameCanvas" tabindex="0"></canvas>
+  <div id="focus-hint">ゲーム画面をクリックして操作</div>
+  <a id="abyss-link" href="../abyss-hop.html">🐟 深海版で遊ぶ</a>
+  <a id="manual-link" href="manual.html" target="_blank" rel="noopener">📖 遊び方・説明書</a>
+</div>
+<script>
+(() => {
+  "use strict";
+
+  // ===================== Configuration =====================
+  const CFG = {
+    logicWidth: 800,
+    logicHeight: 600,
+    gravity: 1800,
+    hopVel: -650,
+    diveVel: 520,
+    moveAccel: 800,
+    maxRunSpeed: 220,
+    friction: 0.82,
+    airDrag: 0.96,
+    scrollBase: 96,
+    scrollMax: 280,
+    scrollRamp: 0.004,
+    cameraMarginTop: 120,
+    cameraMarginBottom: 60,
+
+    // 静的障害物：墓石
+    tombRadius: 14,
+    tombEmojiSize: 30,
+
+    // コウモリ（水平遊泳）
+    batRadius: 14,
+    batEmojiSize: 30,
+
+    // フランケンシュタイン（足場這い）
+    frankRadius: 14,
+    frankEmojiSize: 30,
+
+    // 蜘蛛（足場這い・高速・乗り移り）
+    spiderRadius: 11,
+    spiderEmojiSize: 24,
+
+    // 黒猫（正弦波遊泳）
+    blackCatRadius: 15,
+    blackCatEmojiSize: 32,
+    blackCatAmp: 26,
+    blackCatFreq: 3.2,
+
+    // ジャック・オー・ランタン（巨大）
+    pumpkinRadius: 48,
+    pumpkinEmojiSize: 104,
+    pumpkinHp: 3,
+
+    // 幽霊（膨縮遊泳）
+    ghostEmojiSize: 60,
+    ghostBaseScale: 0.62,
+    ghostMaxScale: 1.0,
+    ghostRadiusMin: 17,
+    ghostRadiusMax: 28,
+    ghostSpeed: 105,
+    ghostBreath: 0.9,
+
+    // プレイヤー
+    playerW: 34,
+    playerH: 26,
+    playerHitShrink: 3,
+    playerEmojiSize: 32,
+
+    introDuration: 0.28,
+    safeStartTime: 3.2,
+    diveIgnoreTime: 0.18,
+    maxDt: 0.033,
+    accumulatorMax: 0.1,
+    emberCount: 30,
+    dangerEmberCount: 14,
+    scrollUnit: 120,
+    enemySafeDist: 145,
+    startBannerTime: 0.85,
+    startInvulnTime: 0.65,
+    gameOverFallGravity: 1700,
+    gameOverFallSpin: 5.2,
+    firstEnemyTime: 2.0,
+    firstFrankTime: 2.4,
+    firstBatTime: 2.8,
+    maxTombs: 256,
+    maxFranks: 256,
+    maxSpiders: 256,
+    maxBats: 256,
+    maxBlackCats: 256,
+    maxGhosts: 256,
+    maxPumpkins: 256,
+
+    // 深度解禁（40m までに全敵が出揃う）
+    firstSpiderDepth: 10,
+    firstBlackCatDepth: 20,
+    firstGhostDepth: 30,
+    firstPumpkinDepth: 40,
+
+    // お菓子アイテム
+    powerupEmojiSize: 30,
+    powerupRadius: 15,
+    chocolateEmojiSize: 28,
+    chocolateRadius: 14,
+    wrappedEmojiSize: 26,
+    wrappedRadius: 13,
+    itemPickupParticles: 14,
+    firstItemDepth: 4,
+    itemDepthStep: 8,
+
+    // 🍭 全方位の星
+    starDuration: 12,
+    starEmitInterval: 0.09,
+    starEmitPerTick: 2,
+    starSpeed: 150,
+    starRange: 108,
+    starRadius: 12,
+    star1EmojiSize: 22,
+    star2EmojiSize: 37,
+    maxStars: 64,
+
+    // 🍬 前方60度の炎
+    flameDuration: 10,
+    flameEmitInterval: 0.10,
+    flameEmitPerTick: 2,
+    flameSpeed: 300,
+    flameRadius: 11,
+    flameLife: 1.15,
+    flameSpread: Math.PI / 3,
+    flameEmojiSize: 26,
+    maxFlames: 48,
+
+    // 🍫 淡いシールド
+    shieldInvulnTime: 2.0,
+    shieldRadius: 26,
+
+    // 🔮 水晶玉（まれ）＋雷
+    crystalEmojiSize: 30,
+    crystalRadius: 15,
+    crystalChance: 0.18,
+    thunderDuration: 1.8,
+    thunderIntervalMin: 0.085,
+    thunderIntervalMax: 0.155,
+    boltLife: 0.3,
+    boltHalfWidth: 34,
+  };
+
+  // ===================== DOM =====================
+  const canvas = document.getElementById("gameCanvas");
+  const wrapper = document.getElementById("game-wrapper");
+  const focusHint = document.getElementById("focus-hint");
+  const manualLink = document.getElementById("manual-link");
+  const abyssLink = document.getElementById("abyss-link");
+  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+
+  // ===================== State =====================
+  let state = "title";
+  let lastTime = 0;
+  let acc = 0;
+  let animTime = 0;
+  let focus = false;
+  let bestDepth = 0;
+  let shake = 0;
+  let dim = 0;
+  let flash = 0;
+  let topDanger = 0;
+  let deathWitch = null;
+  let helpVisible = true;
+  let helpTimer = 0;
+
+  const keys = new Set();
+  const latched = { p: false, n: false };
+
+  let worldScroll = 0;
+  let maxScroll = 0;
+  let scrollSpeed = CFG.scrollBase;
+  let introTimer = 0;
+  let playTime = 0;
+  let startBannerTimer = 0;
+  let invulnTimer = 0;
+
+  let player = null;
+  let platforms = [];
+  let tombs = [];
+  let powerups = [];
+  let stars = [];
+  let flames = [];
+  let bats = [];
+  let franks = [];
+  let spiders = [];
+  let blackCats = [];
+  let ghosts = [];
+  let pumpkins = [];
+  let embers = [];
+  let dangerEmbers = [];
+  let particles = [];
+  let bolts = [];
+  let thunderTimer = 0;
+  let thunderTick = 0;
+
+  let cameraY = 0;
+  let generatedUntil = 0;
+  let startPlatform = null;
+  let nextItemDepth = CFG.firstItemDepth;
+  let itemIndex = 0;
+
+  let bgProps = [];
+  let skyStars = [];
+
+  // ===================== localStorage =====================
+  function loadBest() {
+    try {
+      const v = localStorage.getItem("witchhop_best_depth");
+      if (v) bestDepth = Math.max(0, parseInt(v, 10) || 0);
+    } catch (e) { bestDepth = 0; }
+  }
+  function saveBest() {
+    try { localStorage.setItem("witchhop_best_depth", String(bestDepth)); } catch (e) {}
+  }
+  loadBest();
+
+  // ===================== Sprite cache =====================
+  const SPRITES = {};
+  let spriteScale = 0;
+  let bgGradient = null;
+  let dangerGradient = null;
+  let vignetteGrad = null;
+  let moonGrad = null;
+  let pumpkinGlowGrad = null;
+
+  function makeSprite(emoji, fontSize, glowPasses, outline) {
+    const ss = spriteScale;
+    let maxBlur = 0;
+    if (glowPasses) for (const g of glowPasses) maxBlur = Math.max(maxBlur, g.blur);
+    const pad = maxBlur + 9 + (outline ? (outline.width || 2) : 0);
+    const size = fontSize + pad * 2;
+    const px = Math.max(1, Math.round(size * ss));
+    const c = size / 2;
+
+    function blank() {
+      const el = document.createElement("canvas");
+      el.width = px;
+      el.height = px;
+      const o = el.getContext("2d");
+      o.setTransform(ss, 0, 0, ss, 0, 0);
+      o.textAlign = "center";
+      o.textBaseline = "middle";
+      o.font = fontSize + "px sans-serif";
+      return { el, o };
+    }
+
+    // 本体だけ（輪郭シルエット用）
+    const core = blank();
+    core.o.fillStyle = "#ffffff";
+    core.o.fillText(emoji, c, c);
+
+    // グロー込みのスプライト
+    const full = blank();
+    full.o.fillStyle = "#ffffff";
+    if (glowPasses) {
+      for (const g of glowPasses) {
+        full.o.save();
+        full.o.globalAlpha = g.alpha;
+        full.o.shadowColor = g.color;
+        full.o.shadowBlur = g.blur;
+        full.o.fillText(emoji, c, c);
+        full.o.restore();
+      }
+    }
+    full.o.globalAlpha = 1;
+    full.o.shadowBlur = 0;
+    full.o.fillText(emoji, c, c);
+
+    if (!outline) return { canvas: full.el, size };
+
+    // シルエットを縁取りとして回りに敷く
+    const sil = document.createElement("canvas");
+    sil.width = px;
+    sil.height = px;
+    const sc = sil.getContext("2d");
+    sc.drawImage(core.el, 0, 0);
+    sc.globalCompositeOperation = "source-in";
+    sc.fillStyle = outline.color;
+    sc.fillRect(0, 0, px, px);
+
+    const fin = document.createElement("canvas");
+    fin.width = px;
+    fin.height = px;
+    const fc = fin.getContext("2d");
+    const w = (outline.width || 2) * ss;
+    const steps = 12;
+    fc.globalAlpha = outline.alpha != null ? outline.alpha : 1;
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      fc.drawImage(sil, Math.cos(a) * w, Math.sin(a) * w);
+    }
+    fc.globalAlpha = 1;
+    fc.drawImage(full.el, 0, 0);
+    return { canvas: fin, size };
+  }
+
+  function buildSprites() {
+    // 静的障害物
+    SPRITES.tomb = makeSprite("🪦", CFG.tombEmojiSize,
+      [{ color: "rgba(160, 110, 230, 0.5)", blur: 9, alpha: 0.85 }]);
+    // 足場這い
+    SPRITES.frank = makeSprite("🧟", CFG.frankEmojiSize,
+      [{ color: "rgba(120, 220, 140, 0.35)", blur: 8, alpha: 0.7 }]);
+    SPRITES.spider = makeSprite("🕷️", CFG.spiderEmojiSize,
+      [{ color: "rgba(198, 142, 232, 0.55)", blur: 9, alpha: 0.75 }],
+      { color: "rgba(176, 152, 224, 0.42)", width: 1.4, alpha: 1 });
+    // 遊泳
+    SPRITES.bat = makeSprite("🦇", CFG.batEmojiSize, null);
+    SPRITES.blackCat = makeSprite("🐈‍⬛", CFG.blackCatEmojiSize,
+      [{ color: "rgba(190, 150, 255, 0.24)", blur: 8, alpha: 0.45 }],
+      { color: "rgba(198, 178, 250, 0.40)", width: 1.0, alpha: 0.30 });
+    SPRITES.ghost = makeSprite("👻", CFG.ghostEmojiSize,
+      [{ color: "rgba(205, 232, 255, 0.45)", blur: 14, alpha: 0.8 }]);
+    // 巨大
+    SPRITES.pumpkin = makeSprite("🎃", CFG.pumpkinEmojiSize, [
+      { color: "rgba(255, 152, 0, 0.55)", blur: 26, alpha: 1 },
+      { color: "rgba(255, 70, 0, 0.30)", blur: 44, alpha: 0.9 }
+    ]);
+    // プレイヤー
+    SPRITES.witch = makeSprite("🧙‍♀️", CFG.playerEmojiSize,
+      [{ color: "rgba(190, 110, 255, 0.85)", blur: 7, alpha: 0.6 }]);
+    // お菓子
+    SPRITES.itemStar = makeSprite("🍭", CFG.powerupEmojiSize,
+      [{ color: "rgba(255, 110, 210, 0.8)", blur: 10, alpha: 0.9 }]);
+    SPRITES.itemChoco = makeSprite("🍫", CFG.chocolateEmojiSize,
+      [{ color: "rgba(195, 145, 95, 0.55)", blur: 8, alpha: 0.75 }]);
+    SPRITES.itemFlame = makeSprite("🍬", CFG.wrappedEmojiSize,
+      [{ color: "rgba(110, 225, 255, 0.75)", blur: 9, alpha: 0.85 }]);
+    SPRITES.itemCrystal = makeSprite("🔮", CFG.crystalEmojiSize, [
+      { color: "rgba(150, 110, 255, 0.85)", blur: 14, alpha: 0.95 },
+      { color: "rgba(90, 200, 255, 0.45)", blur: 22, alpha: 0.6 }
+    ], { color: "rgba(216, 238, 255, 0.9)", width: 1.8, alpha: 0.8 });
+    // 弾
+    SPRITES.star1 = makeSprite("🌟", CFG.star1EmojiSize,
+      [{ color: "rgba(255, 225, 120, 0.9)", blur: 7, alpha: 0.8 }]);
+    SPRITES.star2 = makeSprite("✨", CFG.star2EmojiSize,
+      [{ color: "rgba(255, 255, 210, 0.9)", blur: 9, alpha: 0.8 }]);
+    SPRITES.flame = makeSprite("🔥", CFG.flameEmojiSize,
+      [{ color: "rgba(255, 150, 40, 0.85)", blur: 13, alpha: 0.9 }]);
+    // タイトル用の大きな絵
+    SPRITES.titlePumpkin = makeSprite("🎃", 168, [
+      { color: "rgba(255, 152, 0, 0.5)", blur: 34, alpha: 1 },
+      { color: "rgba(255, 70, 0, 0.26)", blur: 60, alpha: 0.9 }
+    ]);
+    SPRITES.titleWitch = makeSprite("🧙‍♀️", 104,
+      [{ color: "rgba(190, 110, 255, 0.7)", blur: 18, alpha: 0.65 }]);
+  }
+
+  function ensureSprites() {
+    const rect = wrapper.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const need = Math.min(4, Math.max(1, dpr * (rect.width / CFG.logicWidth)));
+    if (need > spriteScale + 0.01) {
+      spriteScale = Math.ceil(need * 2) / 2;
+      buildSprites();
+    }
+  }
+
+  function drawSprite(sp, x, y, facing, alpha, rot, scale) {
+    if (!sp) return;
+    const s = sp.size * (scale || 1);
+    ctx.save();
+    ctx.translate(x, y);
+    if (rot) ctx.rotate(rot);
+    if (facing > 0) ctx.scale(-1, 1);
+    if (alpha != null && alpha !== 1) ctx.globalAlpha = alpha;
+    ctx.drawImage(sp.canvas, -s / 2, -s / 2, s, s);
+    ctx.restore();
+  }
+
+  // ===================== Helpers =====================
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+  function circleHit(ax, ay, ar, bx, by, br) {
+    const dx = ax - bx, dy = ay - by, rr2 = ar + br;
+    return dx * dx + dy * dy < rr2 * rr2;
+  }
+  function depthNow() {
+    return Math.floor(maxScroll / CFG.scrollUnit);
+  }
+  function countActive(arr) {
+    let n = 0;
+    for (const e of arr) if (e.active) n++;
+    return n;
+  }
+
+  // ===================== Resize =====================
+  let lastCanvasWidth = 0;
+  let lastCanvasHeight = 0;
+  let lastCanvasDpr = 0;
+
+  function resize() {
+    const rect = wrapper.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const nextWidth = Math.max(1, Math.floor(rect.width * dpr));
+    const nextHeight = Math.max(1, Math.floor(rect.height * dpr));
+
+    if (nextWidth !== lastCanvasWidth || nextHeight !== lastCanvasHeight || dpr !== lastCanvasDpr) {
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+      lastCanvasWidth = nextWidth;
+      lastCanvasHeight = nextHeight;
+      lastCanvasDpr = dpr;
+      bgGradient = null;
+      dangerGradient = null;
+      vignetteGrad = null;
+      moonGrad = null;
+      pumpkinGlowGrad = null;
+    }
+
+    const scaleX = rect.width / CFG.logicWidth;
+    const scaleY = rect.height / CFG.logicHeight;
+    ctx.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ensureSprites();
+  }
+  window.addEventListener("resize", resize, { passive: true });
+  resize();
+
+  // ===================== Focus =====================
+  function setFocus(v) {
+    focus = v;
+    if (v) {
+      canvas.focus();
+      focusHint.classList.remove("show");
+    } else {
+      focusHint.classList.add("show");
+      keys.clear();
+      latched.p = false;
+      latched.n = false;
+      if (state === "playing") state = "paused";
+    }
+  }
+  canvas.addEventListener("focus", () => setFocus(true));
+  canvas.addEventListener("blur", () => setFocus(false));
+  wrapper.addEventListener("click", () => setFocus(true));
+  window.addEventListener("blur", () => setFocus(false));
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) setFocus(false);
+  });
+
+  // ===================== Input =====================
+  function codeKey(code) {
+    switch (code) {
+      case "KeyB": return "b";
+      case "KeyF": return "f";
+      case "KeyP": return "p";
+      case "KeyN": return "n";
+      case "KeyR": return "r";
+      case "Enter": return "enter";
+      case "Space": return "space";
+      case "Escape": return "esc";
+      case "ArrowLeft": return "b";
+      case "ArrowRight": return "f";
+      case "ArrowUp": return "p";
+      case "ArrowDown": return "n";
+      case "Slash": return "?";
+      case "Digit3": return "3";
+      default: return null;
+    }
+  }
+
+  window.addEventListener("keydown", (e) => {
+    const k = codeKey(e.code);
+    if (!k) return;
+    if (k === "b" || k === "f" || k === "enter" || k === "space" || k === "esc" || k === "r" ||
+        k === "p" || k === "n" || k === "?" || k === "3") {
+      e.preventDefault();
+    }
+    if (k === "p" || k === "n") {
+      if (e.repeat) return;
+      if (k === "p" && !latched.p) { latched.p = true; onPressEdge("p"); }
+      if (k === "n" && !latched.n) { latched.n = true; onPressEdge("n"); }
+      return;
+    }
+    keys.add(k);
+    if (k === "enter") {
+      if (state === "title" || state === "gameover") startGame();
+    }
+    if (k === "r") {
+      if (state === "gameover") startGame();
+    }
+    if (k === "space") {
+      if (state === "paused") state = "playing";
+    }
+    if (k === "esc") {
+      if (state === "playing") state = "paused";
+      else if (state === "paused") toTitle();
+      else if (state === "gameover") toTitle();
+    }
+    if (k === "?") { helpVisible = !helpVisible; }
+    if (k === "3" && e.shiftKey && state === "title") {
+      bestDepth = 0; saveBest();
+    }
+  }, { passive: false });
+
+  window.addEventListener("keyup", (e) => {
+    const k = codeKey(e.code);
+    if (!k) return;
+    if (k === "p") latched.p = false;
+    if (k === "n") latched.n = false;
+    keys.delete(k);
+  });
+
+  const WIDTH_SCALE = CFG.logicWidth / 800;
+  function scaled(v) { return v * WIDTH_SCALE; }
+
+  function onPressEdge(action) {
+    if (state !== "playing" || !player) return;
+    if (action === "p") {
+      if (player.grounded) {
+        player.vy = scaled(CFG.hopVel);
+        player.grounded = false;
+        spawnHopParticles(player.x, player.y + player.hh);
+      }
+    } else if (action === "n") {
+      if (player.grounded) {
+        player.diveIgnore = CFG.diveIgnoreTime;
+        player.vy = scaled(CFG.diveVel);
+        player.grounded = false;
+        player.airDiveUsed = false;
+      } else if (!player.airDiveUsed) {
+        player.vy = scaled(CFG.diveVel);
+        player.airDiveUsed = true;
+      }
+    }
+  }
+
+  // ===================== Entities =====================
+  function makePlayer() {
+    return {
+      x: CFG.logicWidth / 2, y: 0, vx: 0, vy: 0,
+      hw: CFG.playerW / 2, hh: CFG.playerH / 2,
+      grounded: false, diveIgnore: 0, airDiveUsed: false,
+      facing: 1, invuln: true,
+      starTimer: 0, starAcc: 0, nextStarBig: false,
+      flameTimer: 0, flameAcc: 0,
+      shield: false,
+    };
+  }
+
+  function makePlatform(y, x, w) {
+    return { x, y, w, h: 18, seed: Math.random() * 1000 };
+  }
+  function makeTomb(x, y) { return { x, y, r: CFG.tombRadius, active: true }; }
+  function makeItem(x, y, type) {
+    const r = type === "star" ? CFG.powerupRadius
+      : (type === "choco" ? CFG.chocolateRadius
+        : (type === "crystal" ? CFG.crystalRadius : CFG.wrappedRadius));
+    return { x, y, r, type, active: true, bob: Math.random() * Math.PI * 2 };
+  }
+  function makeStar(x, y, ang, big) {
+    const spd = CFG.starSpeed * (0.75 + Math.random() * 0.5);
+    return {
+      x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+      r: CFG.starRadius, big: !!big,
+      spin: (Math.random() - 0.5) * 6, rot: Math.random() * Math.PI * 2,
+      active: true,
+    };
+  }
+  function makeFlame(x, y, ang) {
+    const spd = CFG.flameSpeed * (0.82 + Math.random() * 0.36);
+    return {
+      x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+      r: CFG.flameRadius, life: CFG.flameLife, maxLife: CFG.flameLife,
+      rot: ang + Math.PI / 2 + (Math.random() - 0.5) * 0.5,
+      active: true,
+    };
+  }
+  function makeBat(x, y) {
+    return {
+      x, y,
+      vx: (Math.random() < 0.5 ? -1 : 1) * (60 + Math.random() * 60),
+      vy: (Math.random() - 0.5) * 40,
+      r: CFG.batRadius,
+      turnTimer: 1 + Math.random() * 2,
+      facing: 1, active: true,
+    };
+  }
+  function makeFrank(x, y, left, right) {
+    return {
+      x, y,
+      vx: (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 30),
+      r: CFG.frankRadius, left, right, active: true,
+    };
+  }
+  function makeSpider(x, y, left, right) {
+    return {
+      x, y,
+      vx: (Math.random() < 0.5 ? -1 : 1) * (55 + Math.random() * 25),
+      vy: 0, falling: false, spin: 0,
+      r: CFG.spiderRadius, left, right, active: true,
+    };
+  }
+  function makeBlackCat(x, y) {
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    return {
+      x, y, baseY: y,
+      vx: dir * (85 + Math.random() * 55),
+      vy: (Math.random() - 0.5) * 26,
+      phase: Math.random() * Math.PI * 2,
+      r: CFG.blackCatRadius, facing: dir, active: true,
+    };
+  }
+  function makeGhost(x, y) {
+    const ang = Math.random() * Math.PI * 2;
+    const spd = CFG.ghostSpeed * (0.8 + Math.random() * 0.4);
+    return {
+      x, y,
+      vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+      breath: Math.random() * Math.PI * 2,
+      scale: CFG.ghostBaseScale, alpha: 1, r: CFG.ghostRadiusMin,
+      facing: Math.cos(ang) >= 0 ? 1 : -1, active: true,
+    };
+  }
+  function makePumpkin(x, y) {
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    return {
+      x, y,
+      vx: dir * (26 + Math.random() * 22),
+      vy: (Math.random() - 0.5) * 14,
+      r: CFG.pumpkinRadius,
+      turnTimer: 2.5 + Math.random() * 2.5,
+      facing: dir,
+      bob: Math.random() * Math.PI * 2,
+      active: true, hp: CFG.pumpkinHp,
+      spikes: (() => {
+        const arr = [];
+        const n = 14;
+        for (let i = 0; i < n; i++) arr.push(0.78 + Math.random() * 0.5);
+        return arr;
+      })(),
+      sway: Math.random() * Math.PI * 2,
+    };
+  }
+
+  const EMBER_COLORS = [
+    "rgba(255, 190, 110, 0.9)",
+    "rgba(255, 140, 60, 0.85)",
+    "rgba(255, 220, 170, 0.8)",
+    "rgba(220, 150, 255, 0.7)",
+  ];
+  function makeEmber() {
+    return {
+      x: Math.random() * CFG.logicWidth,
+      y: Math.random() * CFG.logicHeight,
+      r: 1 + Math.random() * 2.2,
+      speed: 14 + Math.random() * 34,
+      wobble: Math.random() * Math.PI * 2,
+      color: EMBER_COLORS[(Math.random() * EMBER_COLORS.length) | 0],
+    };
+  }
+  function resetEmbers() {
+    for (let i = 0; i < CFG.emberCount; i++) {
+      const b = embers[i] || (embers[i] = makeEmber());
+      b.x = Math.random() * CFG.logicWidth;
+      b.y = Math.random() * CFG.logicHeight;
+      b.r = 1 + Math.random() * 2.2;
+      b.speed = 14 + Math.random() * 34;
+      b.wobble = Math.random() * Math.PI * 2;
+      b.color = EMBER_COLORS[(Math.random() * EMBER_COLORS.length) | 0];
+    }
+    embers.length = CFG.emberCount;
+  }
+  function makeDangerEmber() {
+    return {
+      x: Math.random() * CFG.logicWidth,
+      y: -8 - Math.random() * 46,
+      r: 2 + Math.random() * 3.6,
+      speed: 30 + Math.random() * 60,
+      wobble: Math.random() * Math.PI * 2,
+      color: "rgba(255, 170, 80, 0.95)",
+    };
+  }
+  function resetDangerEmbers() {
+    for (let i = 0; i < CFG.dangerEmberCount; i++) {
+      const b = dangerEmbers[i] || (dangerEmbers[i] = makeDangerEmber());
+      b.x = Math.random() * CFG.logicWidth;
+      b.y = -10 - Math.random() * 64;
+      b.r = 2 + Math.random() * 3.6;
+      b.speed = 30 + Math.random() * 60;
+      b.wobble = Math.random() * Math.PI * 2;
+    }
+    dangerEmbers.length = CFG.dangerEmberCount;
+  }
+
+  function buildSkyStars() {
+    skyStars.length = 0;
+    for (let i = 0; i < 80; i++) {
+      skyStars.push({
+        x: Math.random() * CFG.logicWidth,
+        y: Math.random() * CFG.logicHeight,
+        r: 0.6 + Math.random() * 1.4,
+        ph: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  function buildBgProps() {
+    bgProps.length = 0;
+    const TILE = 900;
+    const n = 16;
+    for (let i = 0; i < n; i++) {
+      bgProps.push({
+        x: 24 + Math.random() * (CFG.logicWidth - 48),
+        wy: (i / n) * TILE + Math.random() * (TILE / n) * 0.8,
+        type: Math.random() < 0.44 ? 0 : (Math.random() < 0.62 ? 1 : 2),
+        s: 0.72 + Math.random() * 0.7,
+      });
+    }
+  }
+
+  // ===================== Particles =====================
+  function spawnHopParticles(x, y) {
+    for (let i = 0; i < 6; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 120,
+        vy: Math.random() * 60,
+        life: 0.4 + Math.random() * 0.3,
+        maxLife: 0.7,
+        r: 1.5 + Math.random() * 2,
+        color: "rgba(210, 170, 255, 0.9)",
+      });
+    }
+  }
+  function spawnPickupParticles(x, y, rgb) {
+    const col = rgb || "255, 210, 130";
+    for (let i = 0; i < CFG.itemPickupParticles; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random() * 120;
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 40,
+        life: 0.5 + Math.random() * 0.4,
+        maxLife: 0.9,
+        r: 1.5 + Math.random() * 2.5,
+        color: "rgba(" + col + ",0.95)",
+      });
+    }
+  }
+  function spawnPopParticles(x, y, rgb, n) {
+    const cnt = n || 10;
+    const col = rgb || "255, 200, 130";
+    for (let i = 0; i < cnt; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 70 + Math.random() * 140;
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life: 0.4 + Math.random() * 0.4,
+        maxLife: 0.8,
+        r: 1.5 + Math.random() * 2.5,
+        color: "rgba(" + col + ",0.92)",
+      });
+    }
+  }
+  function spawnSplash(x, y) {
+    for (let i = 0; i < 20; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 200,
+        vy: -Math.random() * 180,
+        life: 0.8 + Math.random() * 0.5,
+        maxLife: 1.3,
+        r: 2 + Math.random() * 3,
+        color: "rgba(255, 215, 160, 0.95)",
+      });
+    }
+  }
+  function spawnDeathEmbers(x, y) {
+    for (let i = 0; i < 30; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 110,
+        vy: -20 - Math.random() * 130,
+        life: 1.2 + Math.random() * 1.0,
+        maxLife: 2.2,
+        r: 2 + Math.random() * 4,
+        color: "rgba(200, 190, 255, 0.85)",
+      });
+    }
+  }
+  function spawnShieldBreak(x, y) {
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 90 + Math.random() * 140;
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life: 0.5 + Math.random() * 0.4,
+        maxLife: 0.9,
+        r: 2 + Math.random() * 2.5,
+        color: "rgba(205, 160, 110, 0.9)",
+      });
+    }
+  }
+  function spawnPumpkinBurst(x, y) {
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random() * 200;
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life: 0.6 + Math.random() * 0.6,
+        maxLife: 1.2,
+        r: 2 + Math.random() * 4,
+        color: "rgba(255, " + (120 + ((Math.random() * 100) | 0)) + ", 40, 0.95)",
+      });
+    }
+  }
+
+  // ===================== Generation =====================
+  function resetWorld() {
+    player = makePlayer();
+    platforms.length = 0;
+    tombs.length = 0;
+    powerups.length = 0;
+    stars.length = 0;
+    flames.length = 0;
+    franks.length = 0;
+    spiders.length = 0;
+    bats.length = 0;
+    blackCats.length = 0;
+    ghosts.length = 0;
+    pumpkins.length = 0;
+    particles.length = 0;
+    resetEmbers();
+    resetDangerEmbers();
+
+    worldScroll = 0;
+    maxScroll = 0;
+    scrollSpeed = CFG.scrollBase;
+    playTime = 0;
+    startBannerTimer = 0;
+    invulnTimer = 0;
+    shake = 0;
+    dim = 0;
+    flash = 0;
+    topDanger = 0;
+    deathWitch = null;
+    nextItemDepth = CFG.firstItemDepth;
+    itemIndex = 0;
+    bolts.length = 0;
+    thunderTimer = 0;
+    thunderTick = 0;
+
+    startPlatform = makePlatform(120, 0, 340);
+    platforms.push(startPlatform);
+    platforms.push(makePlatform(245, CFG.logicWidth * 0.38, 250));
+    platforms.push(makePlatform(370, CFG.logicWidth - 310, 310));
+    platforms.push(makePlatform(495, 0, 260));
+
+    // 開幕から少し先の足場に敵を置いて、雰囲気を早く見せる
+    tombs.push(makeTomb(CFG.logicWidth - 90, 360));
+    franks.push(makeFrank(CFG.logicWidth - 176, 360, CFG.logicWidth - 300, CFG.logicWidth - 20));
+    bats.push(makeBat(CFG.logicWidth * 0.70, 505));
+
+    player.x = startPlatform.x + startPlatform.w / 2;
+    player.y = startPlatform.y - player.hh;
+    player.vy = 0; player.vx = 0;
+    player.grounded = true;
+    player.diveIgnore = 0;
+    player.airDiveUsed = false;
+
+    cameraY = player.y - CFG.logicHeight * 0.45;
+    generatedUntil = 610;
+    introTimer = CFG.introDuration;
+    helpTimer = 20;
+  }
+
+  function difficultyProfile() {
+    const depthScroll = maxScroll / CFG.scrollUnit;
+    const t = Math.min(1, playTime / 150);
+    const smooth = t * t * (3 - 2 * t);
+    const wave = 0.08 * Math.sin(playTime * 0.23) + 0.05 * Math.sin(depthScroll * 0.71);
+    return Math.max(0, Math.min(1, smooth + wave));
+  }
+
+  function platformOverlaps(pl, arr) {
+    return arr.some(o => Math.abs(o.y - pl.y) < 22 && pl.x < o.x + o.w + 18 && pl.x + pl.w + 18 > o.x);
+  }
+  function addPlatformIfClear(arr, pl) {
+    if (!platformOverlaps(pl, arr)) arr.push(pl);
+  }
+
+  function generateUntil(targetY) {
+    while (generatedUntil < targetY) {
+      const difficulty = difficultyProfile();
+      const depthScroll = maxScroll / CFG.scrollUnit;
+      const early = playTime < CFG.safeStartTime;
+      const spacingMin = early ? 82 : 72 - difficulty * 18;
+      const spacingMax = early ? 118 : 132 - difficulty * 24;
+      const spacing = spacingMin + Math.random() * (spacingMax - spacingMin);
+      const y = generatedUntil + spacing;
+
+      const safeW = early ? 230 + Math.random() * 90 : 165 + Math.random() * (90 - difficulty * 30);
+      const safeBias = 0.5 + Math.sin(depthScroll * 0.9) * 0.22;
+      let safeX = safeBias * (CFG.logicWidth - safeW) + (Math.random() - 0.5) * 120;
+      safeX = Math.max(0, Math.min(CFG.logicWidth - safeW, safeX));
+
+      const edgeChance = early ? 0.28 : 0.22 + difficulty * 0.13;
+      if (Math.random() < edgeChance) {
+        const edgeLeft = Math.random() < 0.5;
+        safeX = edgeLeft ? 0 : CFG.logicWidth - safeW;
+      }
+
+      const segPlatforms = [];
+      segPlatforms.push(makePlatform(y, safeX, safeW));
+
+      const band = Math.floor(depthScroll / 8) % 4;
+      let extraCount = early ? 1 : 1 + Math.floor(Math.random() * (2 + difficulty * 2));
+      if (band === 1 && !early) extraCount += 1;
+      if (band === 3 && Math.random() < 0.45) extraCount += 1;
+
+      for (let i = 0; i < extraCount; i++) {
+        let pw = early ? 180 + Math.random() * 120 : 90 + Math.random() * (160 - difficulty * 35);
+        let px;
+        if (band === 2 && Math.random() < 0.55) {
+          px = Math.random() < 0.5 ? 0 : CFG.logicWidth - pw;
+        } else {
+          px = Math.random() * (CFG.logicWidth - pw);
+        }
+        addPlatformIfClear(segPlatforms, makePlatform(y + (Math.random() - 0.5) * 20, px, pw));
+      }
+
+      platforms.push(...segPlatforms);
+
+      // 墓石：安全足場は塞ぎ切らない
+      segPlatforms.forEach((pl, idx) => {
+        if (playTime < CFG.firstEnemyTime) return;
+        if (idx === 0 && Math.random() < 0.80) return;
+        const chance = 0.24 + difficulty * 0.26 + (band === 1 ? 0.06 : 0);
+        if (Math.random() < chance && pl.w > 80 && tombs.length < CFG.maxTombs) {
+          tombs.push(makeTomb(pl.x + 28 + Math.random() * Math.max(1, pl.w - 56), pl.y - 10));
+        }
+      });
+
+      // フランケンシュタイン
+      segPlatforms.forEach((pl, idx) => {
+        if (playTime < CFG.firstFrankTime) return;
+        if (idx === 0 && Math.random() < 0.66) return;
+        if (pl.w > 110 && franks.length < CFG.maxFranks && Math.random() < 0.20 + difficulty * 0.22) {
+          franks.push(makeFrank(pl.x + 18 + Math.random() * Math.max(1, pl.w - 36), pl.y - 10, pl.x + 10, pl.x + pl.w - 10));
+        }
+      });
+
+      // 蜘蛛：深度10から。狭い足場にも出る厄介さ
+      if (depthScroll > CFG.firstSpiderDepth && spiders.length < CFG.maxSpiders) {
+        segPlatforms.forEach((pl, idx) => {
+          if (idx === 0 && Math.random() < 0.72) return;
+          if (pl.w > 90 && Math.random() < 0.12 + difficulty * 0.16) {
+            spiders.push(makeSpider(pl.x + 16 + Math.random() * Math.max(1, pl.w - 32), pl.y - 9, pl.x + 10, pl.x + pl.w - 10));
+          }
+        });
+      }
+
+      // コウモリ
+      if (playTime > CFG.firstBatTime && bats.length < CFG.maxBats) {
+        const chance = 0.16 + difficulty * 0.24 + (band === 3 ? 0.08 : 0);
+        if (Math.random() < chance) {
+          const sx = 40 + Math.random() * (CFG.logicWidth - 80);
+          const sy = y - 30 - Math.random() * 85;
+          if (!player || Math.hypot(sx - player.x, sy - player.y) > CFG.enemySafeDist) {
+            bats.push(makeBat(sx, sy));
+          }
+        }
+      }
+
+      // 黒猫：深度20から
+      if (depthScroll > CFG.firstBlackCatDepth && blackCats.length < CFG.maxBlackCats) {
+        const chance = 0.09 + difficulty * 0.15 + (band === 3 ? 0.05 : 0);
+        if (Math.random() < chance) {
+          const cx = 50 + Math.random() * (CFG.logicWidth - 100);
+          const cy = y - 40 - Math.random() * 90;
+          if (!player || Math.hypot(cx - player.x, cy - player.y) > CFG.enemySafeDist) {
+            blackCats.push(makeBlackCat(cx, cy));
+          }
+        }
+      }
+
+      // 幽霊：深度30から
+      if (depthScroll > CFG.firstGhostDepth && ghosts.length < CFG.maxGhosts) {
+        const chance = 0.08 + difficulty * 0.13 + (band === 3 ? 0.04 : 0);
+        if (Math.random() < chance) {
+          const fx = 60 + Math.random() * (CFG.logicWidth - 120);
+          const fy = y - 40 - Math.random() * 90;
+          if (!player || Math.hypot(fx - player.x, fy - player.y) > CFG.enemySafeDist + CFG.ghostRadiusMax) {
+            ghosts.push(makeGhost(fx, fy));
+          }
+        }
+      }
+
+      // ジャック・オー・ランタン：深度40から、画面内に最大2体
+      if (depthScroll > CFG.firstPumpkinDepth && pumpkins.length < CFG.maxPumpkins && countActive(pumpkins) < 2) {
+        const chance = 0.09 + difficulty * 0.13 + (band === 2 ? 0.03 : 0);
+        if (Math.random() < chance) {
+          const wx = 110 + Math.random() * (CFG.logicWidth - 220);
+          const wy = y - 60 - Math.random() * 100;
+          if (!player || Math.hypot(wx - player.x, wy - player.y) > CFG.enemySafeDist + CFG.pumpkinRadius) {
+            pumpkins.push(makePumpkin(wx, wy));
+          }
+        }
+      }
+
+      generatedUntil = y;
+    }
+  }
+
+  // お菓子：深度の節目ごとに、これから行く足場へ1個
+  function spawnItemIfDue() {
+    const depth = depthNow();
+    if (depth < nextItemDepth) return;
+    let kind;
+    if (depth >= 14 && Math.random() < CFG.crystalChance) {
+      kind = "crystal";
+    } else {
+      const kinds = ["star", "choco", "flame"];
+      kind = kinds[itemIndex % 3];
+      itemIndex++;
+    }
+
+    // 画面下半分に入っている床だけを候補にする
+    const lowTop = cameraY + CFG.logicHeight * 0.54;
+    const lowBottom = cameraY + CFG.logicHeight - 24;
+    const cands = [];
+    for (const pl of platforms) {
+      if (pl.w < 100) continue;
+      if (pl.y < lowTop || pl.y > lowBottom) continue;
+      cands.push(pl);
+    }
+
+    let target = null;
+    if (cands.length) {
+      // 下寄りの床を優先（取りに行く流れが自然になる）
+      cands.sort((a, b) => b.y - a.y);
+      const pool = cands.slice(0, Math.min(3, cands.length));
+      target = pool[(Math.random() * pool.length) | 0];
+    } else {
+      // 候補が無ければ、画面下に最も近い床へ
+      let bestDist = Infinity;
+      for (const pl of platforms) {
+        if (pl.w < 100) continue;
+        const d = Math.abs(pl.y - (cameraY + CFG.logicHeight * 0.78));
+        if (d < bestDist) { bestDist = d; target = pl; }
+      }
+    }
+
+    if (target && powerups.length < 32) {
+      powerups.push(makeItem(target.x + target.w / 2, target.y - 28, kind));
+    }
+    nextItemDepth += CFG.itemDepthStep;
+  }
+
+  function compactEntities(arr, minY, maxY, activeOnly) {
+    let write = 0;
+    for (let read = 0; read < arr.length; read++) {
+      const entity = arr[read];
+      if (activeOnly && !entity.active) continue;
+      if (entity.y <= minY || entity.y >= maxY) continue;
+      arr[write++] = entity;
+    }
+    arr.length = write;
+  }
+
+  function cleanup(yTop) {
+    const minY = yTop - 200;
+    compactEntities(platforms, minY, Infinity, false);
+    compactEntities(tombs, minY, Infinity, true);
+    compactEntities(powerups, minY, Infinity, true);
+    compactEntities(stars, minY - 200, yTop + CFG.logicHeight + 200, true);
+    compactEntities(flames, minY - 200, yTop + CFG.logicHeight + 200, true);
+    compactEntities(franks, minY, Infinity, true);
+    compactEntities(spiders, minY, Infinity, true);
+    compactEntities(bats, minY, Infinity, true);
+    compactEntities(blackCats, minY, Infinity, true);
+    compactEntities(ghosts, minY, yTop + CFG.logicHeight + 260, true);
+    compactEntities(pumpkins, minY, yTop + CFG.logicHeight + 260, true);
+  }
+
+  function playerHitRadius() {
+    return Math.max(8, CFG.playerW / 2 - CFG.playerHitShrink);
+  }
+
+  // ===================== Physics =====================
+  function consumeShield() {
+    player.shield = false;
+    player.invuln = true;
+    invulnTimer = CFG.shieldInvulnTime;
+    shake = Math.max(shake, 0.22);
+    spawnShieldBreak(player.x, player.y);
+  }
+
+  function checkHazards() {
+    const p = player;
+    if (!p || p.invuln) return;
+    const pr = playerHitRadius();
+    let hit = false;
+
+    for (const e of tombs) { if (e.active && circleHit(p.x, p.y, pr, e.x, e.y, e.r)) { hit = true; break; } }
+    if (!hit) for (const e of franks) { if (e.active && circleHit(p.x, p.y, pr, e.x, e.y, e.r)) { hit = true; break; } }
+    if (!hit) for (const e of spiders) { if (e.active && circleHit(p.x, p.y, pr, e.x, e.y, e.r)) { hit = true; break; } }
+    if (!hit) for (const e of bats) { if (e.active && circleHit(p.x, p.y, pr, e.x, e.y, e.r)) { hit = true; break; } }
+    if (!hit) for (const e of blackCats) { if (e.active && circleHit(p.x, p.y, pr, e.x, e.y, e.r)) { hit = true; break; } }
+    if (!hit) for (const e of ghosts) { if (e.active && circleHit(p.x, p.y, pr, e.x, e.y, e.r)) { hit = true; break; } }
+    if (!hit) for (const e of pumpkins) { if (e.active && circleHit(p.x, p.y, pr, e.x, e.y, e.r)) { hit = true; break; } }
+
+    if (!hit) return;
+    if (p.shield) { consumeShield(); return; }
+    gameOver();
+  }
+
+  // ===== お菓子取得時に敵が寄ってくる =====
+  function unlockedEnemyPools() {
+    const depth = depthNow();
+    const pools = ["bat"];
+    if (depth >= 4) pools.push("frank");
+    if (depth > CFG.firstSpiderDepth) pools.push("spider");
+    if (depth > CFG.firstBlackCatDepth) pools.push("cat");
+    if (depth > CFG.firstGhostDepth) pools.push("ghost");
+    return pools;
+  }
+
+  function platformBelow(y, minW) {
+    let best = null;
+    for (const pl of platforms) {
+      if (pl.y < y + 30 || pl.y > y + 240) continue;
+      if (pl.w < minW) continue;
+      if (!best || pl.y < best.y) best = pl;
+    }
+    return best;
+  }
+
+  function spawnItemSurge(px, py, strong) {
+    const pools = unlockedEnemyPools();
+    const want = strong ? 3 : (Math.random() < 0.5 ? 2 : 1);
+    let spawned = 0;
+    for (let attempt = 0; attempt < want * 8 && spawned < want; attempt++) {
+      const kind = pools[(Math.random() * pools.length) | 0];
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const sx = Math.max(46, Math.min(CFG.logicWidth - 46, px + side * (155 + Math.random() * 140)));
+      const sy = Math.max(cameraY + 56, Math.min(cameraY + CFG.logicHeight - 56, py - 60 - Math.random() * 120));
+      if (Math.hypot(sx - px, sy - py) < 140) continue;
+      if (kind === "bat") {
+        if (bats.length < CFG.maxBats) { bats.push(makeBat(sx, sy)); spawned++; }
+      } else if (kind === "cat") {
+        if (blackCats.length < CFG.maxBlackCats) { blackCats.push(makeBlackCat(sx, sy)); spawned++; }
+      } else if (kind === "ghost") {
+        if (ghosts.length < CFG.maxGhosts) { ghosts.push(makeGhost(sx, sy)); spawned++; }
+      } else if (kind === "spider") {
+        const pl = platformBelow(py, 90);
+        if (pl && spiders.length < CFG.maxSpiders) {
+          spiders.push(makeSpider(pl.x + 18 + Math.random() * Math.max(1, pl.w - 36), pl.y - 9, pl.x + 10, pl.x + pl.w - 10));
+          spawned++;
+        }
+      } else {
+        const pl = platformBelow(py, 110);
+        if (pl && franks.length < CFG.maxFranks) {
+          franks.push(makeFrank(pl.x + 22 + Math.random() * Math.max(1, pl.w - 44), pl.y - 10, pl.x + 10, pl.x + pl.w - 10));
+          spawned++;
+        }
+      }
+    }
+    if (spawned > 0) {
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        particles.push({
+          x: px + Math.cos(a) * 24, y: py + Math.sin(a) * 24,
+          vx: Math.cos(a) * 110, vy: Math.sin(a) * 110,
+          life: 0.38, maxLife: 0.38, r: 2.5,
+          color: "rgba(196, 128, 255, 0.85)",
+        });
+      }
+    }
+  }
+
+  // ===== 🔮 雷 =====
+  function inViewY(y) {
+    const sy = y - cameraY;
+    return sy > -50 && sy < CFG.logicHeight + 50;
+  }
+
+  function zapKill(e, rgb) {
+    e.active = false;
+    spawnPopParticles(e.x, e.y, rgb, 13);
+  }
+
+  function strikeLightning(x) {
+    const hw = CFG.boltHalfWidth;
+    for (const e of bats) if (e.active && inViewY(e.y) && Math.abs(e.x - x) < hw + e.r) zapKill(e, "228, 218, 255");
+    for (const e of blackCats) if (e.active && inViewY(e.y) && Math.abs(e.x - x) < hw + e.r) zapKill(e, "216, 196, 255");
+    for (const e of ghosts) if (e.active && inViewY(e.y) && Math.abs(e.x - x) < hw + e.r) zapKill(e, "236, 246, 255");
+    for (const e of spiders) if (e.active && inViewY(e.y) && Math.abs(e.x - x) < hw + e.r) zapKill(e, "255, 132, 152");
+    for (const e of franks) if (e.active && inViewY(e.y) && Math.abs(e.x - x) < hw + e.r) zapKill(e, "170, 240, 170");
+    for (const e of pumpkins) {
+      if (!e.active || !inViewY(e.y)) continue;
+      if (Math.abs(e.x - x) >= hw + e.r) continue;
+      e.hp -= 1;
+      spawnPopParticles(e.x, e.y, "255, 190, 90", 10);
+      if (e.hp <= 0) {
+        e.active = false;
+        spawnPumpkinBurst(e.x, e.y);
+        shake = Math.max(shake, 0.4);
+      }
+    }
+  }
+
+  function pickBoltTarget() {
+    const cands = [];
+    const lists = [bats, blackCats, ghosts, spiders, franks, pumpkins];
+    for (const arr of lists) {
+      for (const e of arr) {
+        if (!e.active || !inViewY(e.y)) continue;
+        cands.push(e);
+      }
+    }
+    if (cands.length && Math.random() < 0.88) return cands[(Math.random() * cands.length) | 0];
+    return null;
+  }
+
+  function spawnBolt() {
+    const target = pickBoltTarget();
+    const x = target ? target.x : 40 + Math.random() * (CFG.logicWidth - 80);
+    const segs = [];
+    const steps = 9;
+    let cx = x;
+    for (let i = 0; i <= steps; i++) {
+      const y = -20 + (i / steps) * (CFG.logicHeight + 40);
+      if (i > 0) cx += (Math.random() - 0.5) * 52;
+      cx = cx * 0.72 + x * 0.28;
+      segs.push({ x: cx, y });
+    }
+    bolts.push({ x, segs, t: 0, life: CFG.boltLife });
+    shake = Math.max(shake, 0.2);
+    flash = Math.max(flash, 0.55);
+    strikeLightning(x);
+  }
+
+  function updateBolts(dt) {
+    if (thunderTimer > 0) {
+      thunderTimer -= dt;
+      if (thunderTimer < 0) thunderTimer = 0;
+      thunderTick -= dt;
+      if (thunderTick <= 0) {
+        thunderTick = CFG.thunderIntervalMin + Math.random() * (CFG.thunderIntervalMax - CFG.thunderIntervalMin);
+        spawnBolt();
+      }
+    }
+    for (let i = bolts.length - 1; i >= 0; i--) {
+      const b = bolts[i];
+      b.t += dt;
+      if (b.t >= b.life) bolts.splice(i, 1);
+    }
+  }
+
+  function drawThunderTint() {
+    if (thunderTimer <= 0) return;
+    const k = Math.min(1, thunderTimer / 0.5);
+    ctx.save();
+    const g = ctx.createRadialGradient(
+      CFG.logicWidth / 2, CFG.logicHeight / 2, CFG.logicHeight * 0.2,
+      CFG.logicWidth / 2, CFG.logicHeight / 2, CFG.logicHeight * 0.95
+    );
+    g.addColorStop(0, "rgba(120, 100, 220, 0)");
+    g.addColorStop(1, "rgba(96, 76, 200, " + (0.20 * k) + ")");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+    ctx.restore();
+  }
+
+  function drawBolts() {
+    if (!bolts.length) return;
+    for (const b of bolts) {
+      const k = Math.max(0, 1 - b.t / b.life);
+      const a = Math.pow(k, 0.65);
+
+      ctx.save();
+      const g = ctx.createLinearGradient(b.x, 0, b.x, CFG.logicHeight);
+      g.addColorStop(0, "rgba(190, 175, 255, " + (0.22 * a) + ")");
+      g.addColorStop(0.5, "rgba(150, 185, 255, " + (0.13 * a) + ")");
+      g.addColorStop(1, "rgba(255, 200, 120, " + (0.07 * a) + ")");
+      ctx.fillStyle = g;
+      ctx.fillRect(b.x - 26, 0, 52, CFG.logicHeight);
+
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(186, 168, 255, " + (0.75 * a) + ")";
+      ctx.shadowColor = "rgba(170, 140, 255, 1)";
+      ctx.shadowBlur = 24;
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(b.segs[0].x, b.segs[0].y);
+      for (let i = 1; i < b.segs.length; i++) ctx.lineTo(b.segs[i].x, b.segs[i].y);
+      ctx.stroke();
+
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = "rgba(255, 255, 255, " + (0.92 * a) + ")";
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+      const ly = b.segs[b.segs.length - 1];
+      ctx.fillStyle = "rgba(255, 244, 210, " + (0.42 * a) + ")";
+      ctx.beginPath();
+      ctx.arc(ly.x, ly.y - 26, 34 * a + 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function updatePhysics(dt) {
+    if (!player) return;
+    const p = player;
+
+    p.vy += scaled(CFG.gravity) * dt;
+
+    const left = keys.has("b");
+    const right = keys.has("f");
+    if (p.grounded) {
+      if (left && !right) { p.vx -= scaled(CFG.moveAccel) * dt; p.facing = -1; }
+      else if (right && !left) { p.vx += scaled(CFG.moveAccel) * dt; p.facing = 1; }
+      else { p.vx *= CFG.friction; }
+      if (p.vx > scaled(CFG.maxRunSpeed)) p.vx = scaled(CFG.maxRunSpeed);
+      if (p.vx < -scaled(CFG.maxRunSpeed)) p.vx = -scaled(CFG.maxRunSpeed);
+    } else {
+      p.vx *= CFG.airDrag;
+    }
+
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    if (p.diveIgnore > 0) p.diveIgnore -= dt;
+
+    if (p.x < p.hw) { p.x = p.hw; p.vx = 0; }
+    if (p.x > CFG.logicWidth - p.hw) { p.x = CFG.logicWidth - p.hw; p.vx = 0; }
+
+    p.grounded = false;
+    if (p.vy >= 0) {
+      const prevY = p.y - p.vy * dt;
+      for (const pl of platforms) {
+        if (p.diveIgnore > 0) continue;
+        const platTop = pl.y;
+        const wasAbove = (prevY + p.hh) <= platTop + 1;
+        const nowOnOrBelow = (p.y + p.hh) >= platTop;
+        const withinX = p.x + p.hw - CFG.playerHitShrink > pl.x && p.x - p.hw + CFG.playerHitShrink < pl.x + pl.w;
+        if (wasAbove && nowOnOrBelow && withinX) {
+          p.y = platTop - p.hh;
+          p.vy = 0;
+          p.grounded = true;
+          p.airDiveUsed = false;
+          break;
+        }
+      }
+    }
+
+    // お菓子の取得
+    if (state === "playing") {
+      const grabR = playerHitRadius();
+      for (const pu of powerups) {
+        if (!pu.active) continue;
+        if (circleHit(p.x, p.y, grabR, pu.x, pu.y, pu.r)) {
+          pu.active = false;
+          if (pu.type === "star") {
+            p.starTimer = CFG.starDuration;
+            p.starAcc = 0;
+            spawnPickupParticles(pu.x, pu.y, "255, 140, 220");
+            spawnItemSurge(pu.x, pu.y, false);
+          } else if (pu.type === "choco") {
+            p.shield = true;
+            spawnPickupParticles(pu.x, pu.y, "215, 170, 120");
+            spawnItemSurge(pu.x, pu.y, false);
+          } else if (pu.type === "crystal") {
+            thunderTimer = CFG.thunderDuration;
+            thunderTick = 0;
+            flash = Math.max(flash, 0.8);
+            shake = Math.max(shake, 0.3);
+            spawnPickupParticles(pu.x, pu.y, "190, 170, 255");
+          } else {
+            p.flameTimer = CFG.flameDuration;
+            p.flameAcc = 0;
+            spawnPickupParticles(pu.x, pu.y, "120, 225, 255");
+            spawnItemSurge(pu.x, pu.y, false);
+          }
+        }
+      }
+    }
+
+    if (state === "playing" && introTimer <= 0 && !p.invuln) {
+      checkHazards();
+    }
+  }
+
+  function updateDeathWitch(dt) {
+    if (!deathWitch) return;
+    deathWitch.vy += scaled(CFG.gameOverFallGravity) * dt;
+    deathWitch.x += deathWitch.vx * dt;
+    deathWitch.y += deathWitch.vy * dt;
+    deathWitch.rot += deathWitch.vr * dt;
+    const bottom = cameraY + CFG.logicHeight + 90;
+    if (deathWitch.y > bottom) {
+      deathWitch.y = bottom;
+      deathWitch.vy = 0;
+      deathWitch.vx *= 0.92;
+      deathWitch.vr *= 0.92;
+    }
+  }
+
+  function projectileHits(pj) {
+    for (const e of spiders) {
+      if (e.active && circleHit(pj.x, pj.y, pj.r, e.x, e.y, e.r)) {
+        e.active = false; spawnPopParticles(e.x, e.y, "240, 120, 130", 9); return true;
+      }
+    }
+    for (const e of franks) {
+      if (e.active && circleHit(pj.x, pj.y, pj.r, e.x, e.y, e.r)) {
+        e.active = false; spawnPopParticles(e.x, e.y, "150, 230, 150", 9); return true;
+      }
+    }
+    for (const e of bats) {
+      if (e.active && circleHit(pj.x, pj.y, pj.r, e.x, e.y, e.r)) {
+        e.active = false; spawnPopParticles(e.x, e.y, "210, 180, 255", 9); return true;
+      }
+    }
+    for (const e of blackCats) {
+      if (e.active && circleHit(pj.x, pj.y, pj.r, e.x, e.y, e.r)) {
+        e.active = false; spawnPopParticles(e.x, e.y, "200, 170, 255", 9); return true;
+      }
+    }
+    for (const e of ghosts) {
+      if (e.active && circleHit(pj.x, pj.y, pj.r, e.x, e.y, e.r)) {
+        e.active = false; spawnPopParticles(e.x, e.y, "225, 240, 255", 9); return true;
+      }
+    }
+    for (const e of pumpkins) {
+      if (e.active && circleHit(pj.x, pj.y, pj.r, e.x, e.y, e.r)) {
+        e.hp -= 1;
+        spawnPopParticles(pj.x, pj.y, "255, 170, 70", 8);
+        if (e.hp <= 0) {
+          e.active = false;
+          spawnPumpkinBurst(e.x, e.y);
+          shake = Math.max(shake, 0.35);
+          flash = 0.34;
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function updateEntities(dt) {
+    for (const sh of bats) {
+      if (!sh.active) continue;
+      sh.x += sh.vx * dt;
+      sh.y += sh.vy * dt;
+      sh.turnTimer -= dt;
+      if (sh.turnTimer <= 0) {
+        sh.turnTimer = 1 + Math.random() * 2;
+        sh.vx += (Math.random() - 0.5) * 60;
+        sh.vy += (Math.random() - 0.5) * 40;
+        const maxSX = 140, maxSY = 80;
+        if (sh.vx > maxSX) sh.vx = maxSX;
+        if (sh.vx < -maxSX) sh.vx = -maxSX;
+        if (sh.vy > maxSY) sh.vy = maxSY;
+        if (sh.vy < -maxSY) sh.vy = -maxSY;
+      }
+      if (sh.x < 20) { sh.x = 20; sh.vx = Math.abs(sh.vx); }
+      if (sh.x > CFG.logicWidth - 20) { sh.x = CFG.logicWidth - 20; sh.vx = -Math.abs(sh.vx); }
+      if (sh.y < cameraY + 20) { sh.y = cameraY + 20; sh.vy = Math.abs(sh.vy); }
+      if (sh.y > cameraY + CFG.logicHeight - 20) { sh.y = cameraY + CFG.logicHeight - 20; sh.vy = -Math.abs(sh.vy); }
+      sh.facing = sh.vx >= 0 ? 1 : -1;
+    }
+
+    for (const c of blackCats) {
+      if (!c.active) continue;
+      c.phase += CFG.blackCatFreq * dt;
+      c.x += c.vx * dt;
+      c.baseY += c.vy * dt;
+      if (c.x < 22) { c.x = 22; c.vx = Math.abs(c.vx); }
+      if (c.x > CFG.logicWidth - 22) { c.x = CFG.logicWidth - 22; c.vx = -Math.abs(c.vx); }
+      const am = CFG.blackCatAmp;
+      if (c.baseY < cameraY + am + 22) { c.baseY = cameraY + am + 22; c.vy = Math.abs(c.vy); }
+      if (c.baseY > cameraY + CFG.logicHeight - am - 22) { c.baseY = cameraY + CFG.logicHeight - am - 22; c.vy = -Math.abs(c.vy); }
+      c.y = c.baseY + Math.sin(c.phase) * am;
+      c.facing = c.vx >= 0 ? 1 : -1;
+    }
+
+    for (const c of franks) {
+      if (!c.active) continue;
+      c.x += c.vx * dt;
+      if (c.x < c.left) { c.x = c.left; c.vx = Math.abs(c.vx); }
+      if (c.x > c.right) { c.x = c.right; c.vx = -Math.abs(c.vx); }
+    }
+
+    for (const c of spiders) {
+      if (!c.active) continue;
+
+      if (c.falling) {
+        // 糸を切って自然に落ちる
+        // 落下は演出としてゆっくり。即座に画面外へ消えないよう終端速度を制限
+        c.vy += scaled(CFG.gravity) * 0.22 * dt;
+        if (c.vy > 190) c.vy = 190;
+        c.y += c.vy * dt;
+        c.x += c.vx * 0.22 * dt;
+        c.spin += dt * 2.6 * (c.vx >= 0 ? 1 : -1);
+
+        // 途中の床に着地したら、そのまま這い始める
+        let landed = false;
+        for (const pl of platforms) {
+          if (pl.w < 70) continue;
+          // 落下開始地点の床には再着地しない
+          if (pl.y <= c.dropPlatformY + 18) continue;
+          if (c.y + 9 < pl.y || c.y + 9 > pl.y + 24) continue;
+          if (c.x < pl.x + 4 || c.x > pl.x + pl.w - 4) continue;
+          c.y = pl.y - 9;
+          c.vy = 0;
+          c.spin = 0;
+          c.falling = false;
+          c.left = pl.x + 12;
+          c.right = pl.x + pl.w - 12;
+          c.vx = (Math.random() < 0.5 ? -1 : 1) * (55 + Math.random() * 25);
+          landed = true;
+          break;
+        }
+        if (landed) continue;
+
+        // 画面下へ抜けたら消える
+        if (c.y > cameraY + CFG.logicHeight + 140) c.active = false;
+        continue;
+      }
+
+      c.x += c.vx * dt;
+      if (c.x < c.left || c.x > c.right) {
+        // 床の端まで来たら、そのまま落ちていく
+        c.x = Math.max(c.left, Math.min(c.right, c.x));
+        c.falling = true;
+        c.vy = 8;
+        c.dropPlatformY = c.y + 9;
+        c.vx = c.vx >= 0 ? 1 : -1;
+        c.vx *= 28;
+      }
+    }
+
+    for (const pf of ghosts) {
+      if (!pf.active) continue;
+      pf.x += pf.vx * dt;
+      pf.y += pf.vy * dt;
+      pf.breath += CFG.ghostBreath * dt;
+      const t = 0.5 + 0.5 * Math.sin(pf.breath);
+      pf.scale = CFG.ghostBaseScale + (CFG.ghostMaxScale - CFG.ghostBaseScale) * t;
+      pf.alpha = 0.68 + 0.32 * t;
+      pf.r = CFG.ghostRadiusMin + (CFG.ghostRadiusMax - CFG.ghostRadiusMin) * t;
+      const rad = pf.r;
+      if (pf.x < rad) { pf.x = rad; pf.vx = Math.abs(pf.vx); }
+      if (pf.x > CFG.logicWidth - rad) { pf.x = CFG.logicWidth - rad; pf.vx = -Math.abs(pf.vx); }
+      if (pf.y < cameraY + rad) { pf.y = cameraY + rad; pf.vy = Math.abs(pf.vy); }
+      if (pf.y > cameraY + CFG.logicHeight - rad) { pf.y = cameraY + CFG.logicHeight - rad; pf.vy = -Math.abs(pf.vy); }
+      pf.facing = pf.vx >= 0 ? 1 : -1;
+    }
+
+    for (const wh of pumpkins) {
+      if (!wh.active) continue;
+      wh.bob += dt * 1.2;
+      wh.x += wh.vx * dt;
+      wh.y += (wh.vy + Math.sin(wh.bob) * 10) * dt;
+      wh.turnTimer -= dt;
+      if (wh.turnTimer <= 0) {
+        wh.turnTimer = 2.2 + Math.random() * 2.8;
+        wh.vx += (Math.random() - 0.5) * 24;
+        wh.vy += (Math.random() - 0.5) * 14;
+        const maxWX = 58, maxWY = 28;
+        if (wh.vx > maxWX) wh.vx = maxWX;
+        if (wh.vx < -maxWX) wh.vx = -maxWX;
+        if (wh.vy > maxWY) wh.vy = maxWY;
+        if (wh.vy < -maxWY) wh.vy = -maxWY;
+      }
+      if (wh.x < 72) { wh.x = 72; wh.vx = Math.abs(wh.vx); }
+      if (wh.x > CFG.logicWidth - 72) { wh.x = CFG.logicWidth - 72; wh.vx = -Math.abs(wh.vx); }
+      if (wh.y < cameraY + 56) { wh.y = cameraY + 56; wh.vy = Math.abs(wh.vy); }
+      if (wh.y > cameraY + CFG.logicHeight - 56) { wh.y = cameraY + CFG.logicHeight - 56; wh.vy = -Math.abs(wh.vy); }
+      wh.facing = wh.vx >= 0 ? 1 : -1;
+      // 燻る火花
+      if (Math.random() < dt * 6) {
+        particles.push({
+          x: wh.x + (Math.random() - 0.5) * 70,
+          y: wh.y + (Math.random() - 0.5) * 60,
+          vx: (Math.random() - 0.5) * 20,
+          vy: -20 - Math.random() * 30,
+          life: 0.5 + Math.random() * 0.5,
+          maxLife: 1,
+          r: 1 + Math.random() * 1.8,
+          color: "rgba(255, 170, 60, 0.9)",
+        });
+      }
+    }
+
+    for (const b of embers) {
+      b.y -= b.speed * dt;
+      b.x += Math.sin(b.wobble + playTime * 2) * 0.5;
+      b.wobble += dt * 2;
+      if (b.y < cameraY - 10) {
+        b.y = cameraY + CFG.logicHeight + 10;
+        b.x = Math.random() * CFG.logicWidth;
+      }
+    }
+
+    if (topDanger > 0) {
+      for (const b of dangerEmbers) {
+        b.y -= b.speed * dt;
+        b.x += Math.sin(b.wobble + playTime * 3) * 0.9;
+        b.wobble += dt * 2.4;
+        if (b.y < -80) {
+          b.y = 16 + Math.random() * 42;
+          b.x = Math.random() * CFG.logicWidth;
+        }
+      }
+    }
+
+    // 🍭 全方位の星
+    if (player && player.starTimer > 0 && state === "playing") {
+      player.starTimer -= dt;
+      if (player.starTimer < 0) player.starTimer = 0;
+      player.starAcc += dt;
+      while (player.starAcc >= CFG.starEmitInterval && stars.length < CFG.maxStars) {
+        player.starAcc -= CFG.starEmitInterval;
+        for (let k = 0; k < CFG.starEmitPerTick && stars.length < CFG.maxStars; k++) {
+          const ang = Math.random() * Math.PI * 2;
+          player.nextStarBig = !player.nextStarBig;
+          stars.push(makeStar(player.x + Math.cos(ang) * 6, player.y + Math.sin(ang) * 6, ang, player.nextStarBig));
+        }
+      }
+    }
+
+    // 🍬 前方60度の炎
+    if (player && player.flameTimer > 0 && state === "playing") {
+      player.flameTimer -= dt;
+      if (player.flameTimer < 0) player.flameTimer = 0;
+      player.flameAcc += dt;
+      const base = player.facing > 0 ? 0 : Math.PI;
+      while (player.flameAcc >= CFG.flameEmitInterval && flames.length < CFG.maxFlames) {
+        player.flameAcc -= CFG.flameEmitInterval;
+        for (let k = 0; k < CFG.flameEmitPerTick && flames.length < CFG.maxFlames; k++) {
+          const ang = base + (Math.random() - 0.5) * CFG.flameSpread;
+          flames.push(makeFlame(player.x + Math.cos(base) * 16, player.y + Math.sin(base) * 16, ang));
+        }
+      }
+    }
+
+    // 星の更新
+    const rangeSq = CFG.starRange * CFG.starRange;
+    for (const n of stars) {
+      if (!n.active) continue;
+      n.x += n.vx * dt;
+      n.y += n.vy * dt;
+      n.rot += n.spin * dt;
+      if (player) {
+        const ddx = n.x - player.x, ddy = n.y - player.y;
+        if (ddx * ddx + ddy * ddy > rangeSq) { n.active = false; continue; }
+      }
+      if (projectileHits(n)) n.active = false;
+    }
+
+    // 炎の更新
+    for (const fl of flames) {
+      if (!fl.active) continue;
+      fl.x += fl.vx * dt;
+      fl.y += fl.vy * dt;
+      fl.life -= dt;
+      if (fl.life <= 0) { fl.active = false; continue; }
+      if (projectileHits(fl)) fl.active = false;
+    }
+
+    for (const pu of powerups) {
+      if (pu.active) pu.bob += dt * 2;
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const pt = particles[i];
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.vy += 30 * dt;
+      pt.life -= dt;
+      if (pt.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function updateCameraAndScroll(dt) {
+    if (state !== "playing") return;
+    scrollSpeed += CFG.scrollRamp * dt * 60;
+    if (scrollSpeed > CFG.scrollMax) scrollSpeed = CFG.scrollMax;
+
+    const dy = scrollSpeed * dt;
+    cameraY += dy;
+    worldScroll += dy;
+    if (worldScroll > maxScroll) maxScroll = worldScroll;
+
+    const screenY = player.y - cameraY;
+    topDanger = Math.max(0, Math.min(1, -screenY / CFG.cameraMarginTop));
+    if (screenY < -CFG.cameraMarginTop) { gameOver(); return; }
+    if (screenY > CFG.logicHeight + CFG.cameraMarginBottom) { gameOver(); return; }
+  }
+
+  // ===================== Game flow =====================
+  function toTitle() {
+    state = "title";
+    cameraY = 0;
+    worldScroll = 0;
+    maxScroll = 0;
+    player = null;
+    deathWitch = null;
+    particles.length = 0;
+    stars.length = 0;
+    flames.length = 0;
+    bolts.length = 0;
+    thunderTimer = 0;
+    thunderTick = 0;
+    dim = 0;
+    flash = 0;
+    shake = 0;
+    topDanger = 0;
+    resetEmbers();
+  }
+
+  function startGame() {
+    resetWorld();
+    state = "intro";
+    startBannerTimer = CFG.startBannerTime;
+    invulnTimer = CFG.startInvulnTime;
+    if (player) {
+      player.invuln = true;
+      spawnSplash(player.x, player.y - player.hh - 8);
+    }
+    setFocus(true);
+  }
+
+  function gameOver() {
+    if (state === "gameover") return;
+    state = "gameover";
+    shake = 0.35;
+    dim = 0.7;
+    if (player) {
+      player.starTimer = 0;
+      player.flameTimer = 0;
+      player.shield = false;
+      stars.length = 0;
+      flames.length = 0;
+      deathWitch = {
+        x: player.x, y: player.y,
+        vx: Math.max(-160, Math.min(160, player.vx * 0.55 + (Math.random() - 0.5) * 80)),
+        vy: -120, rot: 0,
+        vr: (Math.random() < 0.5 ? -1 : 1) * CFG.gameOverFallSpin,
+        facing: player.facing || 1,
+      };
+      spawnDeathEmbers(player.x, player.y);
+    }
+    const depth = depthNow();
+    const best = Math.floor(bestDepth / CFG.scrollUnit);
+    if (depth > best) { bestDepth = maxScroll; saveBest(); }
+  }
+
+  // ===================== Background drawing =====================
+  function drawSky() {
+    if (!bgGradient) {
+      bgGradient = ctx.createLinearGradient(0, 0, 0, CFG.logicHeight);
+      bgGradient.addColorStop(0, "#2e1a4e");
+      bgGradient.addColorStop(0.42, "#1b0c30");
+      bgGradient.addColorStop(0.78, "#0d0418");
+      bgGradient.addColorStop(1, "#06010c");
+    }
+    ctx.fillStyle = bgGradient;
+    ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+  }
+
+  function drawSkyStars() {
+    const off = (cameraY * 0.05) % CFG.logicHeight;
+    ctx.save();
+    ctx.fillStyle = "#e9dcff";
+    for (const s of skyStars) {
+      let sy = s.y - off;
+      sy = ((sy % CFG.logicHeight) + CFG.logicHeight) % CFG.logicHeight;
+      ctx.globalAlpha = 0.16 + 0.30 * (0.5 + 0.5 * Math.sin(animTime * 1.6 + s.ph));
+      ctx.beginPath();
+      ctx.arc(s.x, sy, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawMoon() {
+    const depth = depthNow();
+    const a = Math.max(0.14, Math.min(1, 1 - depth / 150));
+    const mx = 648, my = 62;
+    if (!moonGrad) {
+      moonGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 168);
+      moonGrad.addColorStop(0, "rgba(255, 238, 206, 0.13)");
+      moonGrad.addColorStop(0.3, "rgba(232, 208, 188, 0.05)");
+      moonGrad.addColorStop(1, "rgba(210, 190, 180, 0)");
+    }
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(mx, my);
+    // 淡い光輪
+    ctx.fillStyle = moonGrad;
+    ctx.beginPath(); ctx.arc(0, 0, 168, 0, Math.PI * 2); ctx.fill();
+    // 月本体（くすませて背景に沈める）
+    const body = ctx.createRadialGradient(-12, -14, 4, 0, 0, 46);
+    body.addColorStop(0, "rgba(224, 214, 200, 0.62)");
+    body.addColorStop(0.7, "rgba(198, 186, 182, 0.52)");
+    body.addColorStop(1, "rgba(160, 150, 158, 0.34)");
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.arc(0, 0, 44, 0, Math.PI * 2); ctx.fill();
+    // クレーター（ごく薄く）
+    ctx.fillStyle = "rgba(120, 110, 126, 0.22)";
+    ctx.beginPath(); ctx.arc(-13, -10, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(12, 9, 6.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, -23, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(20, -16, 3, 0, Math.PI * 2); ctx.fill();
+    // 上端だけ縁取る細い月明かり
+    ctx.strokeStyle = "rgba(238, 228, 210, 0.16)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, 44, Math.PI * 1.12, Math.PI * 1.86); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawDeadTree(x, y, s) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    ctx.strokeStyle = "rgba(9, 4, 16, 0.92)";
+    ctx.lineCap = "round";
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -74); ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -42); ctx.lineTo(-24, -64);
+    ctx.moveTo(0, -54); ctx.lineTo(22, -78);
+    ctx.moveTo(0, -22); ctx.lineTo(-16, -36);
+    ctx.moveTo(-16, -36); ctx.lineTo(-24, -32);
+    ctx.moveTo(0, -64); ctx.lineTo(-8, -84);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawGraveCluster(x, y, s) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    ctx.fillStyle = "rgba(9, 4, 16, 0.92)";
+    rr(-28, -34, 18, 34, 8); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-2, 0); ctx.lineTo(-2, -34);
+    ctx.arc(8, -34, 10, Math.PI, 0);
+    ctx.lineTo(18, 0);
+    ctx.closePath(); ctx.fill();
+    rr(22, -26, 15, 26, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFence(x, y, s) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    ctx.strokeStyle = "rgba(9, 4, 16, 0.92)";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const bx = i * 14;
+      ctx.moveTo(bx, 0); ctx.lineTo(bx, -48);
+      ctx.moveTo(bx - 4, -40); ctx.lineTo(bx, -50);
+      ctx.moveTo(bx + 4, -40); ctx.lineTo(bx, -50);
+    }
+    ctx.moveTo(-4, -12); ctx.lineTo(60, -12);
+    ctx.moveTo(-4, -32); ctx.lineTo(60, -32);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFarSilhouettes() {
+    const TILE = 900;
+    const par = ((cameraY * 0.32) % TILE + TILE) % TILE;
+    for (const p of bgProps) {
+      const base = p.wy - par;
+      for (let t = -1; t <= 1; t++) {
+        const sy = base + t * TILE;
+        if (sy < -140 || sy > CFG.logicHeight + 140) continue;
+        if (p.type === 0) drawDeadTree(p.x, sy, p.s);
+        else if (p.type === 1) drawGraveCluster(p.x, sy, p.s);
+        else drawFence(p.x, sy, p.s);
+      }
+    }
+  }
+
+  function drawFog() {
+    const par = (cameraY * 0.5) % 540;
+    ctx.save();
+    ctx.fillStyle = "rgba(126, 96, 190, 0.055)";
+    for (let i = -1; i <= 2; i++) {
+      const y = i * 540 - par + 250;
+      const x = CFG.logicWidth * (i % 2 === 0 ? 0.32 : 0.7) + Math.sin(animTime * 0.25 + i * 1.7) * 70;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 340, 76, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawVignette() {
+    if (!vignetteGrad) {
+      vignetteGrad = ctx.createRadialGradient(
+        CFG.logicWidth / 2, CFG.logicHeight * 0.46, CFG.logicHeight * 0.28,
+        CFG.logicWidth / 2, CFG.logicHeight * 0.46, CFG.logicHeight * 0.95
+      );
+      vignetteGrad.addColorStop(0, "rgba(0,0,0,0)");
+      vignetteGrad.addColorStop(1, "rgba(4, 0, 10, 0.66)");
+    }
+    ctx.fillStyle = vignetteGrad;
+    ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+  }
+
+  function drawBackground() {
+    drawSky();
+    drawSkyStars();
+    drawMoon();
+    drawFarSilhouettes();
+    drawFog();
+  }
+
+  // ===================== Foreground drawing =====================
+  function drawAsphalt(x, y, w, h, seed) {
+    ctx.save();
+
+    // 下方向へ落ちる紫の残光
+    ctx.shadowColor = "rgba(150, 62, 220, 0.4)";
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = "#251f31";
+    ctx.fillRect(x, y, w, h);
+    ctx.restore();
+
+    // 側面の陰
+    ctx.fillStyle = "rgba(6, 2, 12, 0.55)";
+    ctx.fillRect(x, y + h - 4, w, 4);
+
+    // 上面の縁石
+    ctx.fillStyle = "#3b3451";
+    ctx.fillRect(x, y, w, 3);
+    ctx.fillStyle = "#524a70";
+    ctx.fillRect(x, y, w, 1);
+    // キャンドルの照り返し
+    ctx.fillStyle = "rgba(255, 152, 60, 0.10)";
+    ctx.fillRect(x, y + 3, w, 2);
+
+    // ひび割れ
+    ctx.strokeStyle = "rgba(10, 5, 18, 0.55)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const range = Math.max(1, w - 20);
+      const cx = x + 10 + ((((seed * 13 + i * 97) | 0) % range) + range) % range;
+      if (cx < x + 5 || cx > x + w - 5) continue;
+      ctx.beginPath();
+      ctx.moveTo(cx, y + 3);
+      ctx.lineTo(cx + (i % 2 === 0 ? 5 : -5), y + h - 3);
+      ctx.stroke();
+    }
+
+    // 苔
+    ctx.fillStyle = "rgba(72, 108, 82, 0.28)";
+    for (let i = 0; i < 2; i++) {
+      const range = Math.max(1, w - 16);
+      const mx = x + 8 + ((((seed * 31 + i * 211) | 0) % range) + range) % range;
+      ctx.beginPath();
+      ctx.ellipse(mx, y + 5, 5 + (i % 2) * 3, 2.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawPlatforms() {
+    for (const pl of platforms) {
+      const sy = pl.y - cameraY;
+      if (sy < -40 || sy > CFG.logicHeight + 40) continue;
+      drawAsphalt(pl.x, sy, pl.w, pl.h, pl.seed);
+    }
+  }
+
+  function drawEmbers() {
+    const playing = state === "playing" && topDanger <= 0;
+    ctx.save();
+    const baseAlpha = playing ? 0.18 : 0.42;
+    for (const e of embers) {
+      const sy = e.y - cameraY;
+      if (sy < -8 || sy > CFG.logicHeight + 8) continue;
+      ctx.globalAlpha = baseAlpha * (0.55 + 0.45 * Math.sin(e.wobble));
+      ctx.fillStyle = e.color;
+      ctx.beginPath();
+      ctx.arc(e.x, sy, e.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawTombs() {
+    for (const s of tombs) {
+      if (!s.active) continue;
+      const sy = s.y - cameraY;
+      if (sy < -20 || sy > CFG.logicHeight + 20) continue;
+      drawSprite(SPRITES.tomb, s.x, sy, -1, 1, 0);
+    }
+  }
+
+  function drawItems() {
+    for (const pu of powerups) {
+      if (!pu.active) continue;
+      const sy = pu.y - cameraY + Math.sin(pu.bob) * 3.5;
+      if (sy < -24 || sy > CFG.logicHeight + 24) continue;
+      const sp = pu.type === "star" ? SPRITES.itemStar
+        : (pu.type === "choco" ? SPRITES.itemChoco
+          : (pu.type === "crystal" ? SPRITES.itemCrystal : SPRITES.itemFlame));
+      drawSprite(sp, pu.x, sy, -1, 1, 0);
+      // ほのかな誘導リング
+      ctx.save();
+      ctx.globalAlpha = 0.16 + 0.1 * Math.sin(pu.bob * 1.6);
+      ctx.strokeStyle = pu.type === "star" ? "#ff8fd8"
+        : (pu.type === "choco" ? "#c8996a"
+          : (pu.type === "crystal" ? "#b79cff" : "#7fe0ff"));
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(pu.x, sy, pu.r + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      if (pu.type === "crystal") {
+        ctx.save();
+        ctx.globalAlpha = 0.4 + 0.25 * Math.sin(pu.bob * 2.4);
+        ctx.strokeStyle = "rgba(160, 200, 255, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(pu.x, sy, pu.r + 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawFranks() {
+    for (const c of franks) {
+      if (!c.active) continue;
+      const sy = c.y - cameraY;
+      if (sy < -20 || sy > CFG.logicHeight + 20) continue;
+      drawSprite(SPRITES.frank, c.x, sy, c.vx >= 0 ? 1 : -1, 1, 0);
+    }
+  }
+
+  function drawSpiders() {
+    for (const c of spiders) {
+      if (!c.active) continue;
+      const sy = c.y - cameraY;
+      if (sy < -20 || sy > CFG.logicHeight + 20) continue;
+      drawSprite(SPRITES.spider, c.x, sy, c.vx >= 0 ? 1 : -1, 1, c.spin || 0);
+    }
+  }
+
+  function drawBats() {
+    for (const sh of bats) {
+      if (!sh.active) continue;
+      const sy = sh.y - cameraY;
+      if (sy < -30 || sy > CFG.logicHeight + 30) continue;
+      drawSprite(SPRITES.bat, sh.x, sy, sh.facing, 1, 0);
+    }
+  }
+
+  function drawBlackCats() {
+    for (const c of blackCats) {
+      if (!c.active) continue;
+      const sy = c.y - cameraY;
+      if (sy < -30 || sy > CFG.logicHeight + 30) continue;
+      drawSprite(SPRITES.blackCat, c.x, sy, c.facing, 1, 0);
+    }
+  }
+
+  function drawGhosts() {
+    for (const pf of ghosts) {
+      if (!pf.active) continue;
+      const sy = pf.y - cameraY;
+      if (sy < -90 || sy > CFG.logicHeight + 90) continue;
+      drawSprite(SPRITES.ghost, pf.x, sy, pf.facing, pf.alpha, 0, pf.scale);
+    }
+  }
+
+  function drawPumpkins() {
+    if (!pumpkinGlowGrad) {
+      pumpkinGlowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 130);
+      pumpkinGlowGrad.addColorStop(0, "rgba(255, 160, 40, 0.30)");
+      pumpkinGlowGrad.addColorStop(0.5, "rgba(255, 110, 20, 0.13)");
+      pumpkinGlowGrad.addColorStop(1, "rgba(255, 80, 0, 0)");
+    }
+    for (const wh of pumpkins) {
+      if (!wh.active) continue;
+      const sy = wh.y - cameraY;
+      if (sy < -160 || sy > CFG.logicHeight + 160) continue;
+
+      // 蝋燭の炎のような不規則な明滅
+      const flick = 0.72 + 0.16 * Math.sin(animTime * 5.3 + wh.bob)
+                         + 0.09 * Math.sin(animTime * 13.7 + wh.sway)
+                         + 0.05 * Math.sin(animTime * 29.1);
+      const sway = Math.sin(animTime * 0.72 + wh.sway) * 0.075;
+      const breathe = 1 + Math.sin(animTime * 1.5 + wh.bob) * 0.028;
+
+      ctx.save();
+      ctx.translate(wh.x, sy);
+
+      // 周囲の闇：カボチャが光を吸うように、背景を沈ませる
+      const dark = ctx.createRadialGradient(0, 0, 26, 0, 0, 168);
+      dark.addColorStop(0, "rgba(4, 0, 10, 0.72)");
+      dark.addColorStop(0.52, "rgba(8, 2, 16, 0.36)");
+      dark.addColorStop(1, "rgba(10, 4, 20, 0)");
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.arc(0, 0, 168, 0, Math.PI * 2); ctx.fill();
+
+      // 外側の橙オーラ
+      ctx.globalAlpha = flick;
+      ctx.fillStyle = pumpkinGlowGrad;
+      ctx.beginPath(); ctx.arc(0, 0, 130, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // 揺らめく棘のある影（おどろおどろしさの芯）
+      ctx.save();
+      ctx.rotate(Math.sin(animTime * 0.42 + wh.sway) * 0.28);
+      ctx.beginPath();
+      const n = wh.spikes.length;
+      for (let i = 0; i <= n; i++) {
+        const idx = i % n;
+        const ang = (i / n) * Math.PI * 2;
+        const wob = 0.9 + 0.1 * Math.sin(animTime * 2.1 + idx);
+        const rad = 76 * wh.spikes[idx] * wob;
+        const px = Math.cos(ang) * rad;
+        const py = Math.sin(ang) * rad * 0.94;
+        if (i === 0) ctx.moveTo(px, py);
+        else {
+          const midA = ang - Math.PI / n;
+          const midR = 46 * wob;
+          ctx.lineTo(Math.cos(midA) * midR, Math.sin(midA) * midR);
+          ctx.lineTo(px, py);
+        }
+      }
+      ctx.closePath();
+      ctx.fillStyle = "rgba(18, 2, 24, 0.5)";
+      ctx.fill();
+      ctx.restore();
+
+      // 本体（ゆっくり揺れる）
+      ctx.save();
+      ctx.rotate(sway);
+      ctx.scale(breathe, breathe);
+      drawSprite(SPRITES.pumpkin, 0, 0, wh.facing, 1, 0);
+      ctx.restore();
+
+      // 口と目の漏れる光
+      ctx.globalAlpha = 0.20 + 0.20 * flick;
+      ctx.fillStyle = "rgba(255, 176, 60, 0.85)";
+      ctx.beginPath(); ctx.arc(0, 4, 30, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+
+      ctx.restore();
+
+      if (wh.hp < CFG.pumpkinHp) {
+        ctx.save();
+        const bw = 44, bx = wh.x - bw / 2, by = sy + 60;
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
+        ctx.fillStyle = "rgba(255, 180, 70, 0.9)";
+        ctx.fillRect(bx, by, bw * (wh.hp / CFG.pumpkinHp), 3);
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawStarAura() {
+    if (!player || player.starTimer <= 0 || state !== "playing") return;
+    const sx = player.x, sy = player.y - cameraY;
+    const pulse = 0.5 + 0.5 * Math.sin(animTime * 6);
+    ctx.save();
+    ctx.globalAlpha = 0.09 + 0.09 * pulse;
+    ctx.strokeStyle = "rgba(255, 170, 230, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx, sy, CFG.starRange * (0.85 + 0.1 * pulse), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawStars() {
+    for (const n of stars) {
+      if (!n.active) continue;
+      const sy = n.y - cameraY;
+      if (sy < -20 || sy > CFG.logicHeight + 20) continue;
+      drawSprite(n.big ? SPRITES.star2 : SPRITES.star1, n.x, sy, -1, 0.95, n.rot);
+    }
+  }
+
+  function drawFlames() {
+    for (const fl of flames) {
+      if (!fl.active) continue;
+      const sy = fl.y - cameraY;
+      if (sy < -20 || sy > CFG.logicHeight + 20) continue;
+      const fade = Math.max(0.25, fl.life / fl.maxLife);
+      drawSprite(SPRITES.flame, fl.x, sy, -1, fade, fl.rot);
+    }
+  }
+
+  function drawShieldRing() {
+    if (!player || !player.shield || state !== "playing") return;
+    const sx = player.x, sy = player.y - cameraY;
+    const r = CFG.shieldRadius + Math.sin(animTime * 3.4) * 1.2;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = "rgba(190, 145, 100, 0.45)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(200, 155, 110, 0.07)";
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDeathWitch() {
+    if (!deathWitch) return;
+    const sy = deathWitch.y - cameraY;
+    if (sy < -80 || sy > CFG.logicHeight + 120) return;
+    drawSprite(SPRITES.witch, deathWitch.x, sy, deathWitch.facing, 0.9, deathWitch.rot);
+    ctx.save();
+    ctx.translate(deathWitch.x, sy);
+    ctx.rotate(deathWitch.rot);
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = "#e6d4ff";
+    ctx.beginPath();
+    ctx.arc(-10, -18, 2.4, 0, Math.PI * 2);
+    ctx.arc(8, -24, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPlayer() {
+    if (!player) return;
+    const sx = Math.round(player.x);
+    const sy = Math.round(player.y - cameraY);
+
+    if (player.invuln || state === "intro") {
+      ctx.save();
+      ctx.strokeStyle = "rgba(220, 180, 255, 0.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, CFG.playerEmojiSize * 0.6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    drawSprite(SPRITES.witch, sx, sy, player.facing, 1, 0);
+  }
+
+  function drawParticles() {
+    for (const pt of particles) {
+      const sy = pt.y - cameraY;
+      if (sy < -10 || sy > CFG.logicHeight + 10) continue;
+      ctx.globalAlpha = Math.min(1, Math.max(0, pt.life / (pt.maxLife || 1)));
+      ctx.fillStyle = pt.color;
+      ctx.beginPath();
+      ctx.arc(pt.x, sy, pt.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTopDanger() {
+    if (state !== "playing" || topDanger <= 0) return;
+    ctx.save();
+    const alpha = Math.min(1, 0.18 + topDanger * 0.62);
+
+    if (!dangerGradient) {
+      dangerGradient = ctx.createLinearGradient(0, 0, 0, 96);
+      dangerGradient.addColorStop(0, "rgba(12, 2, 22, 0.72)");
+      dangerGradient.addColorStop(0.55, "rgba(58, 18, 84, 0.30)");
+      dangerGradient.addColorStop(1, "rgba(10, 0, 18, 0)");
+    }
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = dangerGradient;
+    ctx.fillRect(0, 0, CFG.logicWidth, 116);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = "rgba(255, 176, 96, 0.72)";
+    for (const b of dangerEmbers) {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r * (0.8 + topDanger * 0.6), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillStyle = "rgba(232, 208, 244, " + alpha + ")";
+    ctx.shadowColor = "rgba(150, 80, 220, 0.75)";
+    ctx.shadowBlur = 10;
+    ctx.fillText("↑ 夜に引き戻される", CFG.logicWidth / 2, 14);
+    ctx.restore();
+  }
+
+  function drawTimerBar(y, ratio, label, colorA, colorB) {
+    const bw = 156, bh = 8, bx = CFG.logicWidth - 168, by = y;
+    ctx.save();
+    ctx.fillStyle = "rgba(18, 6, 32, 0.7)";
+    rr(bx, by, bw, bh, 4); ctx.fill();
+    const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+    g.addColorStop(0, colorA);
+    g.addColorStop(1, colorB);
+    ctx.fillStyle = g;
+    rr(bx, by, Math.max(2, bw * ratio), bh, 4); ctx.fill();
+    ctx.strokeStyle = "rgba(255, 200, 140, 0.22)";
+    ctx.lineWidth = 1;
+    rr(bx, by, bw, bh, 4); ctx.stroke();
+    ctx.fillStyle = "#ffe6c8";
+    ctx.font = "11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(label, bx, by - 1);
+    ctx.restore();
+  }
+
+  function drawHUD() {
+    const depth = depthNow();
+
+    // 深度プレート
+    ctx.save();
+    ctx.fillStyle = "rgba(20, 6, 34, 0.74)";
+    rr(CFG.logicWidth - 168, 12, 156, 32, 9); ctx.fill();
+    ctx.strokeStyle = "rgba(255, 150, 60, 0.35)";
+    ctx.lineWidth = 1;
+    rr(CFG.logicWidth - 168, 12, 156, 32, 9); ctx.stroke();
+    ctx.fillStyle = "#ffd9a8";
+    ctx.font = "bold 16px sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText("🎃 " + depth + " m", CFG.logicWidth - 24, 29);
+    ctx.restore();
+
+    let ty = 52;
+    if (player && player.starTimer > 0) {
+      drawTimerBar(ty, player.starTimer / CFG.starDuration, "🍭 星のオーラ", "#ff8fd8", "#ffcf6a");
+      ty += 20;
+    }
+    if (player && player.flameTimer > 0) {
+      drawTimerBar(ty, player.flameTimer / CFG.flameDuration, "🍬 前方の炎", "#ff9a3c", "#ffd86a");
+      ty += 20;
+    }
+    if (thunderTimer > 0) {
+      drawTimerBar(ty, thunderTimer / CFG.thunderDuration, "🔮 雷の魔法", "#a98cff", "#8fd8ff");
+      ty += 20;
+    }
+    if (player && player.shield) {
+      ctx.save();
+      ctx.fillStyle = "rgba(20, 6, 34, 0.7)";
+      rr(CFG.logicWidth - 168, ty - 4, 116, 16, 8); ctx.fill();
+      ctx.strokeStyle = "rgba(200, 155, 110, 0.35)";
+      ctx.lineWidth = 1;
+      rr(CFG.logicWidth - 168, ty - 4, 116, 16, 8); ctx.stroke();
+      ctx.fillStyle = "#e9c9a0";
+      ctx.font = "11px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText("🍫 シールド", CFG.logicWidth - 158, ty + 4);
+      ctx.restore();
+    }
+
+    if (helpVisible && helpTimer > 0) {
+      ctx.save();
+      ctx.fillStyle = "rgba(20, 6, 34, 0.6)";
+      rr(10, CFG.logicHeight - 34, 372, 24, 6); ctx.fill();
+      ctx.strokeStyle = "rgba(255, 150, 60, 0.22)";
+      ctx.lineWidth = 1;
+      rr(10, CFG.logicHeight - 34, 372, 24, 6); ctx.stroke();
+      ctx.fillStyle = "#f0c9a0";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText("←→: 移動　↑: ホップ　↓: ダイブ　Esc: 一時停止　?: ヘルプ", 20, CFG.logicHeight - 21);
+      ctx.restore();
+    }
+  }
+
+  function drawStartBanner() {
+    if (state !== "intro" && startBannerTimer <= 0) return;
+    const t = state === "intro"
+      ? Math.max(0, introTimer / CFG.introDuration)
+      : Math.max(0, startBannerTimer / CFG.startBannerTime);
+    const alpha = Math.max(0, Math.min(1, t));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(24, 6, 40, 0.4)";
+    ctx.fillRect(0, CFG.logicHeight * 0.38, CFG.logicWidth, 84);
+    ctx.font = "bold 32px sans-serif";
+    ctx.fillStyle = "#fff1dc";
+    ctx.shadowColor = "rgba(255, 140, 40, 0.95)";
+    ctx.shadowBlur = 18;
+    ctx.fillText("🧹 START", CFG.logicWidth / 2, CFG.logicHeight * 0.45);
+    ctx.font = "14px sans-serif";
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#ffc98a";
+    ctx.fillText("魔女の夜へ降りていく", CFG.logicWidth / 2, CFG.logicHeight * 0.53);
+    ctx.restore();
+  }
+
+  // ===================== Screens =====================
+  function drawTitle() {
+    drawBackground();
+    drawBats();
+    drawEmbers();
+
+    // 大きなカボチャと魔女
+    const bobA = Math.sin(animTime * 0.9) * 6;
+    const bobB = Math.sin(animTime * 1.2 + 1.4) * 5;
+    drawSprite(SPRITES.titlePumpkin, 640, 452 + bobA, -1, 0.96, Math.sin(animTime * 0.5) * 0.04);
+    drawSprite(SPRITES.titleWitch, 148, 470 + bobB, 1, 0.96, Math.sin(animTime * 0.7 + 0.6) * 0.05);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(8, 2, 16, 0.52)";
+    ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // タイトル
+    ctx.font = "bold 46px sans-serif";
+    ctx.fillStyle = "#ffb347";
+    ctx.shadowColor = "rgba(255, 110, 0, 0.9)";
+    ctx.shadowBlur = 28;
+    ctx.fillText("魔女の降下", CFG.logicWidth / 2, CFG.logicHeight * 0.22);
+
+    ctx.shadowBlur = 12;
+    ctx.font = "bold 17px sans-serif";
+    ctx.fillStyle = "#d9a6ff";
+    ctx.letterSpacing = "6px";
+    ctx.fillText("WITCH HOP", CFG.logicWidth / 2, CFG.logicHeight * 0.30);
+    ctx.letterSpacing = "0px";
+    ctx.shadowBlur = 0;
+
+    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#cdaee8";
+    ctx.fillText("ハロウィンの夜を、どこまでも降りていく", CFG.logicWidth / 2, CFG.logicHeight * 0.365);
+
+    // 操作
+    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#b79ad4";
+    ctx.fillText("← → ： 左右移動", CFG.logicWidth / 2, CFG.logicHeight * 0.50);
+    ctx.fillText("↑ ： ホップ　　↓ ： ダイブ", CFG.logicWidth / 2, CFG.logicHeight * 0.555);
+    ctx.fillText("B / F / P / N キーでも操作できます", CFG.logicWidth / 2, CFG.logicHeight * 0.605);
+
+    // スタート
+    const pulse = 0.6 + 0.4 * Math.sin(animTime * 3);
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillStyle = "rgba(255, 221, 160, " + (0.55 + 0.45 * pulse) + ")";
+    ctx.fillText("Enter でスタート", CFG.logicWidth / 2, CFG.logicHeight * 0.685);
+
+    const best = Math.floor(bestDepth / CFG.scrollUnit);
+    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#9a7fb8";
+    ctx.fillText("最深記録：" + best + " m", CFG.logicWidth / 2, CFG.logicHeight * 0.775);
+    ctx.fillStyle = "#6f5b87";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("Shift + 3 で記録リセット", CFG.logicWidth / 2, CFG.logicHeight * 0.822);
+
+    if (!focus) {
+      ctx.fillStyle = "rgba(255, 220, 180, 0.9)";
+      ctx.font = "13px sans-serif";
+      ctx.fillText("ゲーム画面をクリックして操作", CFG.logicWidth / 2, CFG.logicHeight * 0.9);
+    }
+    ctx.restore();
+  }
+
+  function drawPaused() {
+    ctx.save();
+    ctx.fillStyle = "rgba(10, 2, 20, 0.7)";
+    ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+    ctx.fillStyle = "#ffd9a8";
+    ctx.font = "bold 26px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("PAUSED", CFG.logicWidth / 2, CFG.logicHeight * 0.45);
+    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#c3a6e0";
+    ctx.fillText("Space で再開　Esc でタイトルへ戻る", CFG.logicWidth / 2, CFG.logicHeight * 0.55);
+    ctx.restore();
+  }
+
+  function drawGameOver() {
+    ctx.save();
+    if (dim > 0) {
+      ctx.fillStyle = "rgba(8, 0, 16, " + (dim * 0.85) + ")";
+      ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+    }
+    ctx.fillStyle = "rgba(10, 2, 20, 0.55)";
+    ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    ctx.fillStyle = "#ff6b4a";
+    ctx.font = "bold 34px sans-serif";
+    ctx.shadowColor = "rgba(255, 70, 0, 0.8)";
+    ctx.shadowBlur = 22;
+    ctx.fillText("GAME OVER", CFG.logicWidth / 2, CFG.logicHeight * 0.30);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "#c39ad8";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("魔女は夜に消えた", CFG.logicWidth / 2, CFG.logicHeight * 0.375);
+
+    const depth = depthNow();
+    const best = Math.floor(bestDepth / CFG.scrollUnit);
+    ctx.fillStyle = "#ffd9a8";
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText("今回の深度：" + depth + " m", CFG.logicWidth / 2, CFG.logicHeight * 0.475);
+    ctx.fillStyle = "#a98ac6";
+    ctx.font = "15px sans-serif";
+    ctx.fillText("最深記録：" + best + " m", CFG.logicWidth / 2, CFG.logicHeight * 0.535);
+
+    ctx.fillStyle = "#c3a6e0";
+    ctx.font = "14px sans-serif";
+    ctx.fillText("Enter / R でもう一度", CFG.logicWidth / 2, CFG.logicHeight * 0.65);
+    ctx.fillText("Esc でタイトルへ", CFG.logicWidth / 2, CFG.logicHeight * 0.71);
+    ctx.restore();
+  }
+
+  function applyShake() {
+    if (shake > 0) {
+      // 最大でも数pxに抑える（長時間の揺れは酔う）
+      const s = Math.min(1, shake * 2.2);
+      const dx = (Math.random() - 0.5) * 5.5 * s;
+      const dy = (Math.random() - 0.5) * 5.5 * s;
+      ctx.translate(dx, dy);
+    }
+  }
+
+  // ===================== Main loop =====================
+  let manualShown = false;
+  function syncLinks() {
+    const show = state === "title" || state === "gameover";
+    if (show !== manualShown) {
+      manualShown = show;
+      manualLink.classList.toggle("show", show);
+      abyssLink.classList.toggle("show", show);
+    }
+  }
+
+  buildSkyStars();
+  buildBgProps();
+  resetEmbers();
+  resetDangerEmbers();
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!lastTime) lastTime = now;
+    let dt = (now - lastTime) / 1000;
+    lastTime = now;
+    if (dt > 0.5) dt = 0.5;
+    animTime += dt;
+
+    syncLinks();
+
+    if (state === "title") {
+      drawTitle();
+      return;
+    }
+
+    const step = CFG.maxDt;
+    acc += dt;
+    if (acc > CFG.accumulatorMax) acc = CFG.accumulatorMax;
+
+    while (acc >= step) {
+      if (state === "intro") {
+        introTimer -= step;
+        playTime += step;
+
+        if (player && startPlatform) {
+          player.x = startPlatform.x + startPlatform.w / 2;
+          player.y = startPlatform.y - player.hh;
+          player.vx = 0; player.vy = 0; player.grounded = true;
+        }
+
+        const introScroll = scrollSpeed * 0.18 * step;
+        cameraY += introScroll;
+        worldScroll += introScroll;
+        if (worldScroll > maxScroll) maxScroll = worldScroll;
+
+        if (introTimer <= 0) {
+          introTimer = 0;
+          state = "playing";
+          if (player && startPlatform) {
+            player.x = startPlatform.x + startPlatform.w / 2;
+            player.y = startPlatform.y - player.hh;
+            player.vx = 0; player.vy = 0; player.grounded = true;
+            player.diveIgnore = 0;
+            player.airDiveUsed = false;
+            player.invuln = true;
+            invulnTimer = CFG.startInvulnTime;
+          }
+        }
+      } else if (state === "playing") {
+        if (invulnTimer > 0) {
+          invulnTimer -= step;
+          if (invulnTimer <= 0 && player) {
+            invulnTimer = 0;
+            player.invuln = false;
+          }
+        }
+        if (startBannerTimer > 0) {
+          startBannerTimer -= step;
+          if (startBannerTimer < 0) startBannerTimer = 0;
+        }
+        if (shake > 0) { shake -= step; if (shake < 0) shake = 0; }
+        if (flash > 0) { flash -= step * 2.4; if (flash < 0) flash = 0; }
+        if (helpTimer > 0) {
+          helpTimer -= step;
+          if (helpTimer < 0) helpTimer = 0;
+        }
+        updatePhysics(step);
+        if (state === "playing") updateCameraAndScroll(step);
+        if (state === "playing") {
+          updateEntities(step);
+          updateBolts(step);
+          playTime += step;
+          generateUntil(cameraY + CFG.logicHeight + 200);
+          spawnItemIfDue();
+          cleanup(cameraY);
+        }
+      } else if (state === "gameover") {
+        updateEntities(step);
+        updateDeathWitch(step);
+        if (shake > 0) shake -= step;
+        if (flash > 0) { flash -= step * 1.6; if (flash < 0) flash = 0; }
+        if (dim > 0) { dim -= step * 0.3; if (dim < 0) dim = 0; }
+      }
+      acc -= step;
+    }
+
+    ctx.save();
+    ctx.clearRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+    applyShake();
+    drawBackground();
+    drawEmbers();
+    drawPlatforms();
+    drawTombs();
+    drawItems();
+    drawFranks();
+    drawSpiders();
+    drawBats();
+    drawBlackCats();
+    drawGhosts();
+    drawPumpkins();
+    drawStarAura();
+    if (state === "gameover") drawDeathWitch();
+    else drawPlayer();
+    drawShieldRing();
+    drawStars();
+    drawFlames();
+    drawBolts();
+    drawParticles();
+    drawVignette();
+    drawThunderTint();
+    drawTopDanger();
+    ctx.restore();
+
+    // UIは揺らさない
+    ctx.save();
+    drawHUD();
+    drawStartBanner();
+    if (flash > 0) {
+      ctx.fillStyle = "rgba(255, 180, 80, " + (flash * 0.35) + ")";
+      ctx.fillRect(0, 0, CFG.logicWidth, CFG.logicHeight);
+    }
+    if (state === "paused") drawPaused();
+    if (state === "gameover") drawGameOver();
+    ctx.restore();
+  }
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
