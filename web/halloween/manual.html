@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>遊び方 - 魔女の降下（Witch Hop）</title>
+<meta name="description" content="ハロウィン版アクション『魔女の降下 - Witch Hop』の1ページ説明書。敵7種・お菓子4種・深度の解禁タイミングをまとめています。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #140826;
+    --night-deep: #0a0316;
+    --surface: #211240;
+    --surface-2: #2b1850;
+    --ink: #f4ece2;
+    --ink-soft: #cdbce4;
+    --ink-dim: #a992c6;
+    --pumpkin: #ff9d42;
+    --pumpkin-line: rgba(255, 157, 66, 0.42);
+    --pumpkin-wash: rgba(255, 157, 66, 0.10);
+    --glow: #b98cff;
+    --glow-wash: rgba(185, 140, 255, 0.10);
+    --line: rgba(244, 236, 226, 0.13);
+    --line-strong: rgba(244, 236, 226, 0.26);
+
+    --font-display: "Cinzel", "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+    --font-jp: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+    --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+    --font-num: "Cinzel", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    --step--1: clamp(0.76rem, 0.74rem + 0.12vw, 0.83rem);
+    --step-0: clamp(0.95rem, 0.92rem + 0.2vw, 1.03rem);
+    --step-1: clamp(1.12rem, 1.05rem + 0.42vw, 1.32rem);
+    --step-2: clamp(1.42rem, 1.28rem + 0.9vw, 1.95rem);
+    --step-3: clamp(2.05rem, 1.6rem + 2.6vw, 3.7rem);
+
+    --space: clamp(1rem, 0.82rem + 1vw, 1.6rem);
+    --gap: clamp(0.75rem, 0.6rem + 0.8vw, 1.15rem);
+    --radius: 14px;
+    --radius-sm: 9px;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 20px 44px -28px rgba(0, 0, 0, 0.9);
+    --measure: 74rem;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 640px at 78% -6%, rgba(255, 157, 66, 0.10), transparent 62%),
+      radial-gradient(900px 520px at 8% 4%, rgba(185, 140, 255, 0.12), transparent 58%),
+      radial-gradient(700px 700px at 50% 118%, rgba(120, 60, 190, 0.16), transparent 70%),
+      var(--night);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: var(--step-0);
+    line-height: 1.9;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  a { color: var(--pumpkin); text-decoration-color: rgba(255, 157, 66, 0.45); text-underline-offset: 0.22em; }
+  a:hover { color: #ffc287; text-decoration-color: currentColor; }
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--pumpkin);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: var(--measure);
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 0.4rem + 3vw, 2.5rem);
+  }
+
+  /* ---------- Hero ---------- */
+  .hero { padding-block: clamp(2rem, 1rem + 5vw, 4.5rem) clamp(1.4rem, 1rem + 2vw, 2.4rem); }
+
+  .hero__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: clamp(1.4rem, 1rem + 3vw, 3rem);
+    align-items: end;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55em;
+    font-family: var(--font-num);
+    font-size: var(--step--1);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin: 0 0 1.1rem;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 1.9rem;
+    height: 1px;
+    background: var(--pumpkin-line);
+  }
+
+  .hero h1 {
+    margin: 0;
+    font-family: var(--font-jp);
+    font-weight: 800;
+    font-size: var(--step-3);
+    line-height: 1.14;
+    letter-spacing: -0.02em;
+    color: #fff4e6;
+    text-shadow: 0 0 34px rgba(255, 140, 40, 0.30);
+  }
+  .hero h1 .emoji {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    margin-inline-start: 0.18em;
+    vertical-align: -0.09em;
+  }
+
+  .hero__latin {
+    margin: 0.75rem 0 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--step-1);
+    letter-spacing: 0.34em;
+    color: var(--glow);
+    text-shadow: 0 0 22px rgba(185, 140, 255, 0.45);
+  }
+
+  .hero__lead {
+    margin: 1.35rem 0 0;
+    max-width: 37ch;
+    color: var(--ink-soft);
+  }
+
+  .specs {
+    margin: 0;
+    border-top: 1px solid var(--line-strong);
+  }
+  .specs div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.62rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .specs dt {
+    font-size: var(--step--1);
+    letter-spacing: 0.06em;
+    color: var(--ink-dim);
+    white-space: nowrap;
+  }
+  .specs dd {
+    margin: 0;
+    text-align: right;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .specs dd strong { font-family: var(--font-num); font-weight: 700; color: var(--pumpkin); }
+
+  /* ---------- Sections ---------- */
+  main { padding-bottom: clamp(2rem, 1rem + 4vw, 4rem); }
+
+  .section { padding-block: clamp(1.8rem, 1.2rem + 2.6vw, 3.2rem); }
+  .section + .section { border-top: 1px solid var(--line); }
+
+  .section__head { margin-bottom: clamp(1.2rem, 1rem + 1.4vw, 2rem); }
+
+  .kicker {
+    margin: 0 0 0.5rem;
+    font-family: var(--font-num);
+    font-size: var(--step--1);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--pumpkin);
+  }
+
+  .section h2 {
+    margin: 0;
+    font-family: var(--font-jp);
+    font-weight: 600;
+    font-size: var(--step-2);
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    font-feature-settings: "palt";
+  }
+
+  .section__note {
+    margin: 0.85rem 0 0;
+    max-width: 62ch;
+    color: var(--ink-soft);
+    font-size: var(--step-0);
+  }
+
+  /* ---------- Goal ---------- */
+  .goal {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: clamp(1.2rem, 1rem + 2.4vw, 2.6rem);
+    align-items: start;
+  }
+
+  .pull {
+    margin: 0;
+    font-family: var(--font-jp);
+    font-weight: 600;
+    font-size: var(--step-2);
+    line-height: 1.55;
+    color: #fff2e0;
+  }
+  .pull em {
+    font-style: normal;
+    color: var(--pumpkin);
+    border-bottom: 1px solid var(--pumpkin-line);
+    padding-bottom: 0.06em;
+  }
+
+  .goal p { margin: 0 0 1em; color: var(--ink-soft); }
+  .goal p:last-child { margin-bottom: 0; }
+
+  /* ---------- Controls ---------- */
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: var(--gap);
+  }
+
+  .key {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.2rem 0.95rem;
+    align-items: start;
+    padding: 0.95rem 1.1rem;
+    background: linear-gradient(160deg, var(--surface), rgba(33, 18, 64, 0.55));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+
+  .caps { display: inline-flex; gap: 0.3rem; padding-top: 0.15rem; }
+
+  kbd {
+    display: inline-block;
+    min-width: 1.85em;
+    padding: 0.12em 0.45em;
+    font-family: var(--font-body);
+    font-size: 0.82em;
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: center;
+    color: #fff2e0;
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+  }
+
+  .key__name { font-weight: 700; color: var(--ink); }
+  .key__desc { grid-column: 2; font-size: var(--step--1); color: var(--ink-dim); line-height: 1.75; }
+
+  /* ---------- Endings ---------- */
+  .endings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    gap: var(--gap);
+  }
+
+  .ending {
+    padding: 1.25rem 1.25rem 1.35rem;
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--pumpkin-line);
+    border-radius: var(--radius-sm);
+    background: rgba(33, 18, 64, 0.5);
+  }
+  .ending h3 {
+    margin: 0 0 0.55rem;
+    font-family: var(--font-jp);
+    font-size: var(--step-1);
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .ending h3 span { color: var(--pumpkin); margin-inline-end: 0.4em; }
+  .ending p { margin: 0; font-size: var(--step--1); color: var(--ink-soft); line-height: 1.85; }
+
+  /* ---------- Bestiary ---------- */
+  .bestiary {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+    gap: var(--gap);
+  }
+
+  .entry {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 1.15rem 1.2rem 1.25rem;
+    background: linear-gradient(168deg, rgba(43, 24, 80, 0.72), rgba(20, 8, 38, 0.72));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  .entry--item {
+    background: linear-gradient(168deg, rgba(255, 157, 66, 0.09), rgba(20, 8, 38, 0.72));
+    border-color: rgba(255, 157, 66, 0.26);
+  }
+
+  .entry--rare {
+    background: linear-gradient(168deg, rgba(185, 140, 255, 0.14), rgba(20, 8, 38, 0.72));
+    border-color: rgba(185, 140, 255, 0.34);
+  }
+
+  .entry__head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .entry__glyph {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 2.7rem;
+    height: 2.7rem;
+    font-size: 1.5rem;
+    line-height: 1;
+    background: rgba(10, 3, 22, 0.62);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+
+  .entry__title { min-width: 0; }
+  .entry__title h3 {
+    margin: 0;
+    font-family: var(--font-jp);
+    font-size: var(--step-1);
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .entry__role {
+    margin: 0.1rem 0 0;
+    font-size: var(--step--1);
+    letter-spacing: 0.08em;
+    color: var(--ink-dim);
+  }
+
+  .entry__text {
+    margin: 0;
+    font-size: var(--step--1);
+    line-height: 1.9;
+    color: var(--ink-soft);
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.34rem;
+    margin: auto 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .tags li {
+    padding: 0.15em 0.6em;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    background: rgba(10, 3, 22, 0.55);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+  }
+  .tags li.is-depth {
+    font-family: var(--font-num);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--pumpkin);
+    border-color: var(--pumpkin-line);
+    background: var(--pumpkin-wash);
+  }
+  .tags li.is-glow {
+    color: var(--glow);
+    border-color: rgba(185, 140, 255, 0.38);
+    background: var(--glow-wash);
+  }
+
+  .group-label {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin: clamp(1.6rem, 1rem + 2vw, 2.4rem) 0 var(--gap);
+    font-family: var(--font-num);
+    font-size: var(--step--1);
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  .group-label::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  /* ---------- Timeline band ---------- */
+  .band {
+    margin-block: clamp(1.6rem, 1rem + 2.6vw, 3rem);
+    padding-block: clamp(1.8rem, 1.2rem + 2.4vw, 3rem);
+    background:
+      radial-gradient(760px 320px at 20% 0%, rgba(255, 157, 66, 0.08), transparent 65%),
+      linear-gradient(180deg, rgba(10, 3, 22, 0.86), rgba(10, 3, 22, 0.52));
+    border-block: 1px solid var(--line-strong);
+  }
+
+  .timeline { margin-top: clamp(1rem, 0.8rem + 1vw, 1.6rem); }
+  .timeline svg { display: block; width: 100%; height: auto; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.4rem;
+    margin: 1.1rem 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--step--1);
+    color: var(--ink-dim);
+  }
+  .legend li { display: inline-flex; align-items: center; gap: 0.45em; }
+  .legend .dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+  }
+  .legend .dot--enemy { color: var(--pumpkin); background: var(--pumpkin-wash); }
+  .legend .dot--item { color: var(--glow); background: var(--glow-wash); }
+
+  /* ---------- Tips ---------- */
+  .tips {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+    gap: 0 clamp(1.4rem, 1rem + 2vw, 2.8rem);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: tip;
+  }
+  .tips li {
+    counter-increment: tip;
+    position: relative;
+    padding: 1.05rem 0 1.05rem 2.7rem;
+    border-top: 1px solid var(--line);
+  }
+  .tips li::before {
+    content: counter(tip, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 1.15rem;
+    font-family: var(--font-num);
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    color: var(--pumpkin);
+    opacity: 0.85;
+  }
+  .tips strong {
+    display: block;
+    margin-bottom: 0.2rem;
+    font-family: var(--font-jp);
+    font-size: var(--step-0);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .tips p { margin: 0; font-size: var(--step--1); color: var(--ink-soft); line-height: 1.85; }
+
+  /* ---------- Footer ---------- */
+  .foot {
+    margin-top: clamp(1.4rem, 1rem + 2vw, 2.4rem);
+    padding-block: clamp(1.6rem, 1.2rem + 2vw, 2.6rem);
+    border-top: 1px solid var(--line-strong);
+  }
+  .foot__grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.6rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .foot p {
+    margin: 0;
+    font-size: var(--step--1);
+    color: var(--ink-dim);
+    max-width: 46ch;
+  }
+  .foot__links { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .foot__links a {
+    display: inline-block;
+    padding: 0.5rem 1.05rem;
+    font-size: var(--step--1);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    border-radius: 999px;
+    border: 1px solid var(--pumpkin-line);
+    color: var(--pumpkin);
+    background: var(--pumpkin-wash);
+    transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  }
+  .foot__links a:hover { color: #1a0b2e; background: var(--pumpkin); transform: translateY(-1px); }
+  .foot__links a.ghost {
+    border-color: rgba(185, 140, 255, 0.4);
+    color: var(--glow);
+    background: var(--glow-wash);
+  }
+  .foot__links a.ghost:hover { color: #14082a; background: var(--glow); }
+
+  .fineprint {
+    margin-top: 1.4rem;
+    font-size: 0.74rem;
+    letter-spacing: 0.03em;
+    color: var(--ink-dim);
+    opacity: 0.8;
+  }
+
+  /* ---------- Reveal ---------- */
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { opacity: 1; }
+    .js .reveal {
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.22, 0.6, 0.3, 1);
+    }
+    .js .reveal.is-visible { opacity: 1; transform: none; }
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 860px) {
+    .hero__grid { grid-template-columns: 1fr; align-items: start; }
+    .goal { grid-template-columns: 1fr; }
+    .hero__lead { max-width: 100%; }
+    .specs { max-width: 30rem; }
+  }
+
+  /* ---------- Print ---------- */
+  @page { size: A4; margin: 16mm; }
+
+  @media print {
+    :root {
+      --night: #ffffff;
+      --surface: #f6f3ee;
+      --surface-2: #ece7df;
+      --ink: #1b1523;
+      --ink-soft: #3d3350;
+      --ink-dim: #5c5273;
+      --pumpkin: #a8541a;
+      --pumpkin-line: rgba(168, 84, 26, 0.4);
+      --pumpkin-wash: rgba(168, 84, 26, 0.08);
+      --glow: #5b3d9c;
+      --glow-wash: rgba(91, 61, 156, 0.08);
+      --line: rgba(27, 21, 35, 0.16);
+      --line-strong: rgba(27, 21, 35, 0.3);
+      --shadow: none;
+    }
+    body { background: #fff; }
+    .band { background: #f7f4ef; }
+    .entry, .key, .ending { background: #fff; box-shadow: none; break-inside: avoid; }
+    .hero h1 { text-shadow: none; }
+    .hero__latin { text-shadow: none; }
+    .foot__links, .js .reveal { display: none; }
+    .reveal, .js .reveal { opacity: 1 !important; transform: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap hero__grid">
+    <div>
+      <p class="eyebrow">ハロウィン版 ・ あそびかた</p>
+      <h1>魔女の降下<span class="emoji" aria-hidden="true">🎃</span></h1>
+      <p class="hero__latin">WITCH HOP</p>
+      <p class="hero__lead">夜の底へ、ひたすら降りていく。足場を渡り、お菓子を拾い、夜が濃くなるほど増える住人たちをやり過ごす。それだけの遊びです。</p>
+    </div>
+    <dl class="specs">
+      <div><dt>深度の表示</dt><dd>🎃 メートル</dd></div>
+      <div><dt>夜の住人</dt><dd><strong>7</strong> 種</dd></div>
+      <div><dt>お菓子</dt><dd><strong>4</strong> 種</dd></div>
+      <div><dt>お菓子の出現</dt><dd>深度 4 から <strong>8</strong> ごと</dd></div>
+      <div><dt>最深記録</dt><dd>ブラウザに保存</dd></div>
+    </dl>
+  </div>
+</header>
+
+<main>
+
+  <!-- 目的 -->
+  <section class="section wrap reveal" id="goal">
+    <div class="section__head">
+      <p class="kicker">目的</p>
+      <h2>できるだけ深く、夜を降りる</h2>
+    </div>
+    <div class="goal">
+      <p class="pull">敵を全滅させるゲームではありません。<em>置いていかれないこと</em>が、いちばんの勝負どころです。</p>
+      <div>
+        <p>足場を渡って下へ進み、到達した深さが画面右上にメートルで表示されます。最深記録はブラウザに残り、次に開いたときもタイトル画面に出ます。</p>
+        <p>カメラは自動で下へ進みます。立ち止まっているだけで夜が上から迫ってくるので、常に「次の足場」を探しながら降りることになります。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 操作 -->
+  <section class="section wrap reveal" id="controls">
+    <div class="section__head">
+      <p class="kicker">操作</p>
+      <h2>キーボードだけで完結します</h2>
+      <p class="section__note">矢印キーのほかに、左手で押しやすい B / F / P / N も同じ働きをします。</p>
+    </div>
+    <div class="keys">
+      <div class="key">
+        <span class="caps"><kbd>←</kbd><kbd>→</kbd></span>
+        <span class="key__name">左右移動</span>
+        <span class="key__desc">B / F でも同じ。加速できるのは床に立っているあいだだけです。</span>
+      </div>
+      <div class="key">
+        <span class="caps"><kbd>↑</kbd></span>
+        <span class="key__name">ホップ</span>
+        <span class="key__desc">P でも同じ。床の上でだけ跳べます。上へ跳ねるので、基本は下へ降りる動きになります。</span>
+      </div>
+      <div class="key">
+        <span class="caps"><kbd>↓</kbd></span>
+        <span class="key__name">ダイブ</span>
+        <span class="key__desc">N でも同じ。乗っている床を突き抜けて落ちます。空中でもう1回だけ追加で使えます。</span>
+      </div>
+      <div class="key">
+        <span class="caps"><kbd>Esc</kbd></span>
+        <span class="key__name">一時停止</span>
+        <span class="key__desc">Space で再開、もう一度 Esc でタイトルへ戻ります。</span>
+      </div>
+      <div class="key">
+        <span class="caps"><kbd>Enter</kbd></span>
+        <span class="key__name">はじめる / やり直す</span>
+        <span class="key__desc">タイトルとゲームオーバー画面で有効。ゲームオーバー後は R でもやり直せます。</span>
+      </div>
+      <div class="key">
+        <span class="caps"><kbd>?</kbd></span>
+        <span class="key__name">画面内ヘルプ</span>
+        <span class="key__desc">プレイ中に出る操作ガイドの表示を切り替えます。</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 終わり方 -->
+  <section class="section wrap reveal" id="endings">
+    <div class="section__head">
+      <p class="kicker">終わり方</p>
+      <h2>終わるのは、3つのとき</h2>
+    </div>
+    <div class="endings">
+      <article class="ending">
+        <h3><span aria-hidden="true">☠</span>夜の住人に触れる</h3>
+        <p>墓石・フランケンシュタイン・コウモリ・蜘蛛・黒猫・幽霊・ジャック・オー・ランタンのどれかに触れると終了です。ただし🍫のシールドを持っているあいだは、1回だけ身代わりになります。</p>
+      </article>
+      <article class="ending">
+        <h3><span aria-hidden="true">↑</span>上へ取り残される</h3>
+        <p>カメラに置いていかれ、画面上端より上に隠れると終了します。少し隠れただけでは即終了せず、「↑ 夜に引き戻される」と警告が出ます。警告が出たら、すぐ下の床へ乗るかダイブしてください。</p>
+      </article>
+      <article class="ending">
+        <h3><span aria-hidden="true">↓</span>下へ落ちすぎる</h3>
+        <p>足場を外して画面下へ抜けすぎても終了です。ダイブは深く進むための手段ですが、抜けすぎると戻れません。</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- 敵 -->
+  <section class="section wrap reveal" id="enemies">
+    <div class="section__head">
+      <p class="kicker">登場するもの ・ 夜の住人</p>
+      <h2>7種。深度を追うごとに増えていきます</h2>
+      <p class="section__note">どの相手も触れると終了します。🌟の星・🔥の炎・🔮の雷で消せるかどうかが分かれ目です。墓石だけは、なにをぶつけても消えません。</p>
+    </div>
+
+    <div class="bestiary">
+
+      <article class="entry">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🧙‍♀️</span>
+          <div class="entry__title">
+            <h3>魔女</h3>
+            <p class="entry__role">あなた</p>
+          </div>
+        </div>
+        <p class="entry__text">操作する魔女です。ホップで上へ、ダイブで下へ。空中では曲がれないので、跳ぶ前に方向と速さを決めてください。開始直後はごく短いあいだ無敵です。</p>
+        <ul class="tags">
+          <li>開始直後は無敵</li>
+          <li>空中では加速できない</li>
+          <li>ダイブは空中で1回</li>
+        </ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🪦</span>
+          <div class="entry__title">
+            <h3>墓石</h3>
+            <p class="entry__role">動かない障害物</p>
+          </div>
+        </div>
+        <p class="entry__text">床の上に建っている、動かない障害です。🌟も🔥も🔮も効きません。地形の一部だと思って、降りた先にないかを必ず見てください。開幕から出ます。</p>
+        <ul class="tags">
+          <li>触れたら終了</li>
+          <li>攻撃は一切効かない</li>
+          <li class="is-depth">深度 0 から</li>
+        </ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🧟</span>
+          <div class="entry__title">
+            <h3>フランケンシュタイン</h3>
+            <p class="entry__role">床を歩く敵</p>
+          </div>
+        </div>
+        <p class="entry__text">床の上を左右に往復します。床から落ちることはありません。幅の広い床に出やすいので、着地する前に端まで目をやってください。🌟1発で消えます。</p>
+        <ul class="tags">
+          <li>触れたら終了</li>
+          <li>🌟 1発</li>
+          <li>開幕 約2.4秒後から</li>
+        </ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🦇</span>
+          <div class="entry__title">
+            <h3>コウモリ</h3>
+            <p class="entry__role">飛び回る敵</p>
+          </div>
+        </div>
+        <p class="entry__text">夜の中を自由に飛び、ときどき向きを変えます。画面の外へは出ず、常に視界のどこかにいます。🌟1発で消えます。開幕の少しあとから出はじめます。</p>
+        <ul class="tags">
+          <li>触れたら終了</li>
+          <li>🌟 1発</li>
+          <li>開幕 約2.8秒後から</li>
+        </ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🕷️</span>
+          <div class="entry__title">
+            <h3>蜘蛛</h3>
+            <p class="entry__role">床を歩く敵</p>
+          </div>
+        </div>
+        <p class="entry__text">狭い床にも平気で居座ります。歩みは遅いのですが、床の端まで来ると糸を切ったように落ちていき、下の床に落ち着くか、そのまま画面の下へ消えます。落ちてくる場所が読めないのが厄介です。</p>
+        <ul class="tags">
+          <li>触れたら終了</li>
+          <li>🌟 1発</li>
+          <li class="is-depth">深度 10 超から</li>
+        </ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🐈‍⬛</span>
+          <div class="entry__title">
+            <h3>黒猫</h3>
+            <p class="entry__role">泳ぐように飛ぶ敵</p>
+          </div>
+        </div>
+        <p class="entry__text">波を描くように上下へ揺れながら近づいてきます。まっすぐ飛ばないので、避ける方向が読みにくい相手です。🌟1発で消えます。</p>
+        <ul class="tags">
+          <li>触れたら終了</li>
+          <li>🌟 1発</li>
+          <li class="is-depth">深度 20 超から</li>
+        </ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">👻</span>
+          <div class="entry__title">
+            <h3>幽霊</h3>
+            <p class="entry__role">膨らんで漂う敵</p>
+          </div>
+        </div>
+        <p class="entry__text">膨らんだり縮んだりしながら漂います。見た目どおり当たり判定も大きくなったり小さくなったりするので、縮んでいるあいだは横をすり抜けられます。🌟1発で消えます。</p>
+        <ul class="tags">
+          <li>触れたら終了</li>
+          <li>🌟 1発</li>
+          <li class="is-depth">深度 30 超から</li>
+        </ul>
+      </article>
+
+      <article class="entry">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🎃</span>
+          <div class="entry__title">
+            <h3>ジャック・オー・ランタン</h3>
+            <p class="entry__role">巨大な敵</p>
+          </div>
+        </div>
+        <p class="entry__text">橙の光を揺らしながら漂う、いちばん大きな相手です。動きは遅く読みやすいのですが、画面を大きく塞ぎます。🌟3発でようやく崩れ、そのときは弾けるように消えます。画面に同時に2体までしか出ません。</p>
+        <ul class="tags">
+          <li>触れたら終了</li>
+          <li>🌟 3発</li>
+          <li class="is-depth">深度 40 超から</li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- アイテム -->
+  <section class="section wrap reveal" id="items">
+    <div class="section__head">
+      <p class="kicker">お菓子</p>
+      <h2>4種。どれも画面の下側の床に落ちています</h2>
+      <p class="section__note">深度4から8ごとに1個、いま見えている範囲の下半分の床の上に置かれます。取ると魔力が灯るかわりに、その匂いにつられて夜の住人が1〜2体寄ってきます。取った直後こそ、位置取りを意識してください。</p>
+    </div>
+
+    <div class="bestiary">
+
+      <article class="entry entry--item">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🍭</span>
+          <div class="entry__title">
+            <h3>キャンディー</h3>
+            <p class="entry__role">星のオーラ</p>
+          </div>
+        </div>
+        <p class="entry__text">取ると12秒間、魔女のまわり全方位へ🌟と✨が飛び散ります。ただし射程は短く、魔女から離れた星は消えてしまいます。敵を消すには、自分から近づく必要があります。</p>
+        <ul class="tags">
+          <li>効果 12 秒</li>
+          <li>全方位</li>
+          <li class="is-glow">近距離のみ</li>
+        </ul>
+      </article>
+
+      <article class="entry entry--item">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🍫</span>
+          <div class="entry__title">
+            <h3>チョコレート</h3>
+            <p class="entry__role">身代わりのシールド</p>
+          </div>
+        </div>
+        <p class="entry__text">淡い輪が魔女を包み、次の接触を1回だけ肩代わりします。割れた瞬間に2秒の無敵がつくので、そのまま突っ切ることもできます。攻めに転じるための保険です。</p>
+        <ul class="tags">
+          <li>1回だけ有効</li>
+          <li>割れると 2 秒無敵</li>
+          <li class="is-glow">防御</li>
+        </ul>
+      </article>
+
+      <article class="entry entry--item">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🍬</span>
+          <div class="entry__title">
+            <h3>包みキャンディ</h3>
+            <p class="entry__role">前方の炎</p>
+          </div>
+        </div>
+        <p class="entry__text">取ると10秒間、魔女が向いている方向へ向かって60度の扇形に🔥を撃ち続けます。射程は🍭より長く、正面の相手はほぼ確実に焼けます。ただし背後の敵には無力です。</p>
+        <ul class="tags">
+          <li>効果 10 秒</li>
+          <li>前方 60 度</li>
+          <li class="is-glow">向きが大事</li>
+        </ul>
+      </article>
+
+      <article class="entry entry--rare">
+        <div class="entry__head">
+          <span class="entry__glyph" aria-hidden="true">🔮</span>
+          <div class="entry__title">
+            <h3>水晶玉</h3>
+            <p class="entry__role">まれに出現 ・ 雷</p>
+          </div>
+        </div>
+        <p class="entry__text">深度14を超えたあたりから、まれに混ざってきます。取ると約1.8秒間、画面上空から雷が落ち続け、光の柱に入った相手をまとめて撃ち抜きます。🎃にも1発ぶん通ります。夜でいちばん強い一枚です。</p>
+        <ul class="tags">
+          <li>まれに出現</li>
+          <li>約 1.8 秒</li>
+          <li class="is-depth">深度 14 超から</li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- 深度タイムライン -->
+  <section class="band reveal" id="depths">
+    <div class="wrap">
+      <div class="section__head">
+        <p class="kicker">夜の深まり</p>
+        <h2>深度40メートルで、住人が全員そろう</h2>
+        <p class="section__note">潜れば潜るほど、夜が濃くなっていきます。10メートルごとに新しい相手が加わり、40メートルで7種すべてが出た状態になります。お菓子はもっと早く、深度4から出はじめます。</p>
+      </div>
+
+      <div class="timeline">
+        <svg viewBox="0 0 960 236" role="img" aria-labelledby="tlTitle tlDesc">
+          <title id="tlTitle">深度ごとの敵とお菓子の解禁タイムライン</title>
+          <desc id="tlDesc">敵は深度0メートルで墓石・フランケンシュタイン・コウモリ、10メートルで蜘蛛、20メートルで黒猫、30メートルで幽霊、40メートルでジャック・オー・ランタンが加わります。お菓子は深度4メートルから8メートルごとに出現し、水晶玉は14メートル以降にまれに混ざります。</desc>
+          <defs>
+            <linearGradient id="nightFade" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#3a2160" stop-opacity="0.85"/>
+              <stop offset="0.45" stop-color="#1e0f38" stop-opacity="0.9"/>
+              <stop offset="1" stop-color="#080112" stop-opacity="0.95"/>
+            </linearGradient>
+          </defs>
+
+          <rect x="48" y="14" width="864" height="176" rx="10" fill="url(#nightFade)" stroke="rgba(244,236,226,0.14)"/>
+
+          <g font-family="Zen Kaku Gothic New, Hiragino Sans, sans-serif" font-size="11" fill="rgba(205,188,228,0.85)">
+            <text x="48" y="206" text-anchor="middle">0</text>
+            <text x="220.8" y="206" text-anchor="middle">10</text>
+            <text x="393.6" y="206" text-anchor="middle">20</text>
+            <text x="566.4" y="206" text-anchor="middle">30</text>
+            <text x="739.2" y="206" text-anchor="middle">40</text>
+            <text x="912" y="206" text-anchor="middle">50</text>
+            <text x="912" y="224" text-anchor="end" font-size="10" fill="rgba(169,146,198,0.9)">深度 m</text>
+          </g>
+
+          <line x1="48" y1="190" x2="912" y2="190" stroke="rgba(244,236,226,0.22)"/>
+          <g stroke="rgba(244,236,226,0.16)">
+            <line x1="220.8" y1="186" x2="220.8" y2="194"/>
+            <line x1="393.6" y1="186" x2="393.6" y2="194"/>
+            <line x1="566.4" y1="186" x2="566.4" y2="194"/>
+            <line x1="739.2" y1="186" x2="739.2" y2="194"/>
+          </g>
+
+          <g font-family="Zen Kaku Gothic New, Hiragino Sans, sans-serif" font-size="10.5" letter-spacing="1.6">
+            <text x="62" y="44" fill="rgba(255,157,66,0.85)">敵</text>
+            <text x="62" y="118" fill="rgba(185,140,255,0.9)">お菓子</text>
+          </g>
+
+          <line x1="48" y1="82" x2="912" y2="82" stroke="rgba(255,157,66,0.28)" stroke-dasharray="2 5"/>
+          <line x1="48" y1="140" x2="912" y2="140" stroke="rgba(185,140,255,0.26)" stroke-dasharray="2 5"/>
+
+          <g font-size="18" text-anchor="middle">
+            <g>
+              <circle cx="48" cy="82" r="15" fill="rgba(255,157,66,0.16)" stroke="rgba(255,157,66,0.55)"/>
+              <text x="48" y="88">🪦</text>
+              <circle cx="76" cy="82" r="15" fill="rgba(255,157,66,0.16)" stroke="rgba(255,157,66,0.55)"/>
+              <text x="76" y="88">🧟</text>
+              <circle cx="104" cy="82" r="15" fill="rgba(255,157,66,0.16)" stroke="rgba(255,157,66,0.55)"/>
+              <text x="104" y="88">🦇</text>
+            </g>
+            <g>
+              <circle cx="220.8" cy="82" r="15" fill="rgba(255,157,66,0.16)" stroke="rgba(255,157,66,0.55)"/>
+              <text x="220.8" y="88">🕷️</text>
+              <circle cx="393.6" cy="82" r="15" fill="rgba(255,157,66,0.16)" stroke="rgba(255,157,66,0.55)"/>
+              <text x="393.6" y="88">🐈‍⬛</text>
+              <circle cx="566.4" cy="82" r="15" fill="rgba(255,157,66,0.16)" stroke="rgba(255,157,66,0.55)"/>
+              <text x="566.4" y="88">👻</text>
+              <circle cx="739.2" cy="82" r="17" fill="rgba(255,157,66,0.22)" stroke="rgba(255,157,66,0.72)"/>
+              <text x="739.2" y="89">🎃</text>
+            </g>
+          </g>
+
+          <g font-size="16" text-anchor="middle">
+            <circle cx="117.1" cy="140" r="13" fill="rgba(185,140,255,0.15)" stroke="rgba(185,140,255,0.5)"/>
+            <text x="117.1" y="145">🍭</text>
+            <circle cx="255.4" cy="140" r="13" fill="rgba(185,140,255,0.15)" stroke="rgba(185,140,255,0.5)"/>
+            <text x="255.4" y="145">🍫</text>
+            <circle cx="393.6" cy="140" r="13" fill="rgba(185,140,255,0.15)" stroke="rgba(185,140,255,0.5)"/>
+            <text x="393.6" y="145">🍬</text>
+            <circle cx="531.8" cy="140" r="13" fill="rgba(185,140,255,0.15)" stroke="rgba(185,140,255,0.5)"/>
+            <text x="531.8" y="145">🍭</text>
+            <circle cx="670.1" cy="140" r="13" fill="rgba(185,140,255,0.15)" stroke="rgba(185,140,255,0.5)"/>
+            <text x="670.1" y="145">🍫</text>
+            <circle cx="808.3" cy="140" r="13" fill="rgba(185,140,255,0.15)" stroke="rgba(185,140,255,0.5)"/>
+            <text x="808.3" y="145">🍬</text>
+            <circle cx="240.7" cy="166" r="11" fill="rgba(185,140,255,0.2)" stroke="rgba(185,140,255,0.75)" stroke-dasharray="3 2"/>
+            <text x="240.7" y="171">🔮</text>
+          </g>
+
+          <g font-family="Zen Kaku Gothic New, Hiragino Sans, sans-serif" font-size="9.5" fill="rgba(255,157,66,0.75)" text-anchor="middle">
+            <text x="220.8" y="62">10</text>
+            <text x="393.6" y="62">20</text>
+            <text x="566.4" y="62">30</text>
+            <text x="739.2" y="60">40</text>
+          </g>
+          <g font-family="Zen Kaku Gothic New, Hiragino Sans, sans-serif" font-size="9.5" fill="rgba(185,140,255,0.8)" text-anchor="middle">
+            <text x="117.1" y="118">4</text>
+            <text x="255.4" y="118">12</text>
+            <text x="393.6" y="118">20</text>
+            <text x="531.8" y="118">28</text>
+            <text x="670.1" y="118">36</text>
+            <text x="808.3" y="118">44</text>
+            <text x="240.7" y="163">14〜</text>
+          </g>
+        </svg>
+      </div>
+
+      <ul class="legend">
+        <li><span class="dot dot--enemy" aria-hidden="true"></span>夜の住人（数字は解禁深度）</li>
+        <li><span class="dot dot--item" aria-hidden="true"></span>お菓子（8メートルごと）</li>
+        <li><span class="dot dot--item" aria-hidden="true"></span>🔮 水晶玉だけは 14 メートル以降にまれに混ざる</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 心得 -->
+  <section class="section wrap reveal" id="tips">
+    <div class="section__head">
+      <p class="kicker">心得</p>
+      <h2>覚えておくと、少しだけ長く潜れます</h2>
+    </div>
+    <ol class="tips">
+      <li>
+        <strong>空中では曲がれない</strong>
+        <p>左右に加速できるのは床に立っているあいだだけです。跳ぶ前に向きと速さを決めてください。</p>
+      </li>
+      <li>
+        <strong>ダイブは床を貫通する</strong>
+        <p>↓は今乗っている床を抜けて下へ落ちます。空中でもう1回だけ使えて、着地すると空中ぶんは回復します。</p>
+      </li>
+      <li>
+        <strong>画面の上に居座らない</strong>
+        <p>カメラは自動で下へ進みます。警告が出たら、すぐ下の床へ乗るか、ダイブして抜けてください。</p>
+      </li>
+      <li>
+        <strong>墓石だけは消せない</strong>
+        <p>🌟も🔥も🔮も効きません。攻撃の効かない唯一の相手なので、地形として避けるしかありません。</p>
+      </li>
+      <li>
+        <strong>お菓子は取りに行く判断</strong>
+        <p>置かれているのは画面の下側の床です。取りに行けば敵のいる床へ乗ることになり、しかも取った直後に敵が寄ってきます。</p>
+      </li>
+      <li>
+        <strong>🍬は前を向いて撃つ</strong>
+        <p>炎は向いている方向の60度だけ。背後から来る相手には無力です。🍭の星は全方位ですが、こちらは近距離限定です。</p>
+      </li>
+    </ol>
+  </section>
+
+  <footer class="foot wrap">
+    <div class="foot__grid">
+      <p>ゲームオーバー後は <kbd>Enter</kbd> または <kbd>R</kbd> でもう一度、<kbd>Esc</kbd> でタイトルへ戻れます。タイトル画面では <kbd>Shift</kbd>+<kbd>3</kbd> で最深記録を消せます。</p>
+      <div class="foot__links">
+        <a href="abyss-hop-halloween.html">← ゲームに戻る</a>
+        <a class="ghost" href="../manual.html">🐟 深海版の説明書</a>
+      </div>
+    </div>
+    <p class="fineprint">魔女の降下 - Witch Hop ／ ハロウィン版 1ページ説明書</p>
+  </footer>
+
+</main>
+
+<script>
+  (function () {
+    document.documentElement.classList.add("js");
+    var target = document.documentElement.querySelectorAll(".reveal");
+    if (!("IntersectionObserver" in window)) {
+      for (var i = 0; i < target.length; i++) target[i].classList.add("is-visible");
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          e.target.classList.add("is-visible");
+          io.unobserve(e.target);
+        }
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.06 });
+    for (var j = 0; j < target.length; j++) io.observe(target[j]);
+  })();
+</script>
+</body>
+</html>
